@@ -130,6 +130,8 @@ void Shell::update_statusbar() {
     NetStatus n = h.net();
     std::string icons;
     if (h.muted()) icons += LV_SYMBOL_MUTE "  ";
+    if (h.record_state().recording) icons += LV_SYMBOL_STOP " REC  ";
+    else if (h.playback().playing) icons += LV_SYMBOL_AUDIO "  ";
     if (n.usb_gadget) icons += LV_SYMBOL_USB "  ";
     if (n.bt_enabled) icons += LV_SYMBOL_BLUETOOTH "  ";
     if (n.wifi_connected) icons += LV_SYMBOL_WIFI "  ";

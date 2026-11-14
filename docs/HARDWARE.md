@@ -17,7 +17,7 @@ Sources: [M5 CardputerZero docs](https://docs.m5stack.com/en/CardputerZero), M5'
 | RTC | RX8130CE | `/dev/rtc0` | Offline time, Clock app |
 | IMU* | BMI270 + BMM150 | iio (`in_accel_*`, `in_anglvel_*`, `in_magn_*`) | Compass, level |
 | IR | TX + RX on GPIO | rc-core: `ir-ctl`, `ir-keytable` | IR Remote |
-| Audio | ES8389 codec, AW8737A amp, 1 W speaker, mic, TRRS | ALSA/PipeWire | Volume, mute (apps: Phase 2) |
+| Audio | ES8389 codec, AW8737A amp, 1 W speaker, mic, TRRS | ALSA/PipeWire; sox `play`/`rec` | Media app (music, voice notes), volume, mute |
 | Wi-Fi / BT | BCM43439 2.4 GHz | NetworkManager, BlueZ | Wi-Fi app, Settings |
 | Ethernet | SR9900A (USB) | `eth0` | Status, System app |
 | USB | GL852G hub, USB-A, 2x USB-C, host/gadget switch | | Gadget modes: Phase 3 |

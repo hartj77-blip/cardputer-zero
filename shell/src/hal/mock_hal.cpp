@@ -4,6 +4,7 @@
 #include <ctime>
 
 #include "hal/hal.h"
+#include "hal/play_clock.h"
 
 namespace zs {
 namespace {
@@ -88,6 +89,78 @@ public:
     bool muted() override { return muted_; }
     void set_muted(bool m) override { muted_ = m; }
 
+    // --- audio (simulated: time advances, nothing is heard)
+    std::vector<Track> music_library() override {
+        return {
+            {"/home/pi/Music/Night Drive.mp3", "Night Drive", "Synthwave Demos", 214},
+            {"/home/pi/Music/Solder Fumes.flac", "Solder Fumes", "Synthwave Demos", 187},
+            {"/home/pi/Music/Low Battery Blues.ogg", "Low Battery Blues", "Bench Tapes", 243},
+            {"/home/pi/Music/Pocket Computer.mp3", "Pocket Computer", "Bench Tapes", 162},
+            {"/home/pi/Music/320x170.mp3", "320x170", "Chip Sessions", 128},
+            {"/home/pi/Music/Interrupt Request.wav", "Interrupt Request", "Chip Sessions", 199},
+        };
+    }
+    bool play(const std::string& path) override {
+        pb_ = PlaybackState{};
+        pb_.path = path;
+        pb_.playing = true;
+        pb_.dur_ms = 30000;
+        for (auto& t : music_library())
+            if (t.path == path) pb_.dur_ms = t.duration_s * 1000;
+        for (auto& t : recs_)
+            if (t.path == path) pb_.dur_ms = t.duration_s * 1000;
+        clock_.start();
+        return true;
+    }
+    void set_paused(bool p) override {
+        if (pb_.path.empty()) return;
+        pb_.paused = p;
+        pb_.playing = !p;
+        if (p) clock_.pause(); else clock_.resume();
+    }
+    void stop() override { pb_ = PlaybackState{}; }
+    PlaybackState playback() override {
+        if (!pb_.path.empty()) {
+            pb_.pos_ms = int(clock_.ms());
+            if (pb_.dur_ms > 0 && pb_.pos_ms >= pb_.dur_ms) {
+                pb_ = PlaybackState{};
+                pb_.finished = true;
+            }
+        }
+        return pb_;
+    }
+
+    std::vector<Track> recordings() override { return recs_; }
+    bool record_start() override {
+        if (rec_.recording) return false;
+        stop();
+        rec_.recording = true;
+        char name[64];
+        std::snprintf(name, sizeof name, "/home/pi/Recordings/note-%03d.wav", ++rec_count_);
+        rec_.path = name;
+        rec_clock_.start();
+        return true;
+    }
+    void record_stop() override {
+        if (!rec_.recording) return;
+        int secs = int(rec_clock_.ms() / 1000);
+        recs_.insert(recs_.begin(), {rec_.path, rec_.path.substr(rec_.path.rfind('/') + 1), "just now", secs < 1 ? 1 : secs});
+        rec_ = RecordState{};
+    }
+    RecordState record_state() override {
+        if (rec_.recording) rec_.elapsed_ms = int(rec_clock_.ms());
+        return rec_;
+    }
+    bool delete_recording(const std::string& path) override {
+        for (size_t i = 0; i < recs_.size(); ++i) {
+            if (recs_[i].path == path) {
+                recs_.erase(recs_.begin() + long(i));
+                return true;
+            }
+        }
+        return false;
+    }
+
     void set_led(Led, bool) override {}
 
     bool ir_send(const IrCode& c) override {
@@ -105,6 +178,14 @@ public:
     void beep(int, int) override {}
 
 private:
+    PlaybackState pb_;
+    PlayClock clock_, rec_clock_;
+    RecordState rec_;
+    int rec_count_ = 2;
+    std::vector<Track> recs_ = {
+        {"/home/pi/Recordings/note-002.wav", "note-002.wav", "Today 09:14", 23},
+        {"/home/pi/Recordings/note-001.wav", "note-001.wav", "Yesterday 18:40", 61},
+    };
     long ticks_ = 0;
     bool wifi_on_ = true;
     bool bt_on_ = true;

@@ -57,6 +57,28 @@ struct IrCode {
     unsigned scancode = 0;
 };
 
+struct Track {
+    std::string path;
+    std::string title;
+    std::string artist;       // folder name for music, date for voice notes
+    int duration_s = -1;      // -1 unknown until played
+};
+
+struct PlaybackState {
+    std::string path;         // empty when stopped
+    bool playing = false;     // false while paused or stopped
+    bool paused = false;
+    bool finished = false;    // last track reached its end (cleared by next play)
+    int pos_ms = 0;
+    int dur_ms = -1;
+};
+
+struct RecordState {
+    bool recording = false;
+    std::string path;
+    int elapsed_ms = 0;
+};
+
 struct SystemInfo {
     std::string hostname;
     std::string model;          // "CardputerZero" or "CardputerZero Lite"
@@ -92,6 +114,20 @@ public:
     virtual void set_volume(int pct) = 0;
     virtual bool muted() = 0;
     virtual void set_muted(bool m) = 0;
+
+    // Audio playback through the speaker / headphone jack (ES8389 + AW8737A).
+    virtual std::vector<Track> music_library() = 0;     // ~/Music
+    virtual bool play(const std::string& path) = 0;      // stops anything playing
+    virtual void set_paused(bool paused) = 0;
+    virtual void stop() = 0;
+    virtual PlaybackState playback() = 0;
+
+    // Voice notes from the MEMS mic, saved to ~/Recordings as 16 kHz mono WAV.
+    virtual std::vector<Track> recordings() = 0;          // newest first
+    virtual bool record_start() = 0;
+    virtual void record_stop() = 0;
+    virtual RecordState record_state() = 0;
+    virtual bool delete_recording(const std::string& path) = 0;
 
     // Keyboard LEDs (Shift / Fn / Sym / 3 status LEDs)
     enum class Led { Shift, Fn, Sym, Status1, Status2, Status3 };

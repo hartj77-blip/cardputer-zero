@@ -25,6 +25,9 @@ STEPS+=",open:files,shot:08-files.ppm"
 STEPS+=",open:notes,shot:09-notes.ppm"
 STEPS+=",open:clock,key: ,wait:2300,shot:10-clock.ppm"
 STEPS+=",open:sysmon,shot:11-system.ppm"
+STEPS+=",open:media,down,down,enter,wait:2600,shot:13-media-music.ppm"
+STEPS+=",right,key:r,wait:3200,shot:14-media-recording.ppm"
+STEPS+=",key:r,wait:300,shot:15-media-voice-notes.ppm"
 STEPS+=",open:settings,down,down,shot:12-settings.ppm"
 
 (cd "$OUT" && HOME="$DEMO" TZ=UTC "$BIN" --script "$STEPS")

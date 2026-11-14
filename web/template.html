@@ -119,7 +119,7 @@ dd { margin: 0; color: var(--muted); align-self: center; }
 
   <div class="notes">
     <h1>Zero<span>OS</span> simulator</h1>
-    <p class="lede">This is the real ZeroShell code from the cardputer-zero repo, compiled to WebAssembly and running at the Cardputer Zero's native 320 × 170. Sensors, battery and Wi-Fi are simulated until the hardware arrives.</p>
+    <p class="lede">This is the real ZeroShell code from the cardputer-zero repo, compiled to WebAssembly and running at the Cardputer Zero's native 320 × 170. Sensors, battery, Wi-Fi and audio are simulated until the hardware arrives.</p>
     <section>
       <h2>Jump to an app</h2>
       <div class="apps" id="apps"></div>
@@ -131,10 +131,11 @@ dd { margin: 0; color: var(--muted); align-self: center; }
         <dt>Enter / OK</dt><dd>Open an app or choose an item</dd>
         <dt>Esc / Back</dt><dd>Go back (the ` key does the same, like on the device)</dd>
         <dt>a–z</dt><dd>On the home screen, jump to the app starting with that letter</dd>
-        <dt>R · L · Space</dt><dd>Rescan Wi-Fi · learn an IR code · start the stopwatch</dd>
+        <dt>Space · N · R</dt><dd>In Media: pause, next track, record a voice note</dd>
+        <dt>R · L</dt><dd>Rescan Wi-Fi · learn an IR code</dd>
       </dl>
     </section>
-    <p class="fine">Notes and IR codes you change live in this browser tab only and reset on reload. Build v0.1.0, Phase 0.</p>
+    <p class="fine">Notes, voice notes and IR codes you change live in this browser tab only and reset on reload. Build v0.1.0, Phase 0.</p>
   </div>
 </div>
 
@@ -252,7 +253,7 @@ dd { margin: 0; color: var(--muted); align-self: center; }
   });
 
   // Jump-to-app chips, in launcher order.
-  const apps = ["Files", "Notes", "Wi-Fi", "IR Remote", "Compass", "Battery", "Clock", "System", "Settings"];
+  const apps = ["Files", "Notes", "Media", "Wi-Fi", "IR Remote", "Compass", "Battery", "Clock", "System", "Settings"];
   const appsEl = document.getElementById("apps");
   const homeBtn = document.createElement("button");
   homeBtn.type = "button"; homeBtn.textContent = "Home";

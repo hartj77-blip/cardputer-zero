@@ -5,6 +5,7 @@ pipewire-pulse
 wireplumber
 alsa-utils
 sox
+libsox-fmt-all
 ir-keytable
 v4l-utils
 rpicam-apps-lite

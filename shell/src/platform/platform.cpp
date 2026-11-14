@@ -21,6 +21,7 @@
 #include <sstream>
 #include <vector>
 
+#include "hal/play_clock.h"
 #include "ui/shell.h"
 
 namespace zs {
@@ -286,6 +287,7 @@ lv_indev_t* platform_init(int w, int h, int) {
     g_h = h;
     g_fb.assign(size_t(w) * h * 3, 0);
     lv_tick_set_cb(tick_cb);
+    play_clock_source() = [] { return long(g_now); };
     lv_display_t* d = lv_display_create(w, h);
     lv_display_set_color_format(d, LV_COLOR_FORMAT_RGB565);
     static std::vector<uint8_t> buf(size_t(w) * h * 2);

@@ -9,22 +9,31 @@
 //   Bluetooth  bluetoothctl / rfkill
 //   audio      wpctl (PipeWire), falls back to amixer
 //   IR         ir-ctl / ir-keytable (rc-core, gpio-ir-tx / gpio-ir-recv)
+//   media      sox: `play` for mp3/flac/ogg/wav, `rec` for voice notes, `soxi` for
+//              durations. One small process per stream; pause = SIGSTOP/SIGCONT.
 //
 // Everything degrades gracefully: a missing file means "unknown", never a crash.
 // None of this is verified on hardware yet (Phase 1 bring-up).
 #include <dirent.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <sys/sysinfo.h>
 #include <sys/utsname.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
 
 #include "hal/hal.h"
+#include "hal/play_clock.h"
 
 namespace zs {
 namespace {
@@ -95,6 +104,63 @@ std::string find_iio(const std::string& needle) {
     return "";
 }
 
+// Start argv as a child in its own process group; returns pid or -1.
+pid_t spawn(const std::vector<std::string>& argv) {
+#ifdef __EMSCRIPTEN__
+    return -1;
+#else
+    pid_t pid = fork();
+    if (pid == 0) {
+        setpgid(0, 0);
+        int devnull = open("/dev/null", O_RDWR);
+        if (devnull >= 0) { dup2(devnull, 0); dup2(devnull, 1); dup2(devnull, 2); }
+        std::vector<char*> a;
+        for (auto& s : argv) a.push_back(const_cast<char*>(s.c_str()));
+        a.push_back(nullptr);
+        execvp(a[0], a.data());
+        _exit(127);
+    }
+    return pid;
+#endif
+}
+
+// True if the child has exited (and reaps it).
+bool exited(pid_t pid) {
+#ifdef __EMSCRIPTEN__
+    return true;
+#else
+    if (pid <= 0) return true;
+    int st;
+    return waitpid(pid, &st, WNOHANG) == pid;
+#endif
+}
+
+void kill_child(pid_t pid, int sig) {
+#ifndef __EMSCRIPTEN__
+    if (pid > 0) {
+        kill(pid, SIGCONT);  // a stopped process can't act on SIGTERM
+        kill(pid, sig);
+        int st;
+        waitpid(pid, &st, 0);
+    }
+#endif
+}
+
+bool has_ext(const std::string& n, std::initializer_list<const char*> exts) {
+    std::string lower;
+    for (char c : n) lower += char(std::tolower((unsigned char)c));
+    for (auto e : exts) {
+        std::string x = e;
+        if (lower.size() > x.size() && lower.compare(lower.size() - x.size(), x.size(), x) == 0) return true;
+    }
+    return false;
+}
+
+std::string stem(const std::string& name) {
+    auto dot = name.rfind('.');
+    return dot == std::string::npos ? name : name.substr(0, dot);
+}
+
 std::string find_power_supply() {
     const std::string base = "/sys/class/power_supply/";
     for (auto& n : list_dir(base)) {
@@ -105,6 +171,11 @@ std::string find_power_supply() {
 
 class LinuxHal : public Hal {
 public:
+    ~LinuxHal() override {
+        stop();
+        record_stop();
+    }
+
     LinuxHal() {
         bat_ = find_power_supply();
         accel_ = find_iio("bmi270");
@@ -215,6 +286,121 @@ public:
     bool muted() override { return run("wpctl get-volume @DEFAULT_AUDIO_SINK@").find("MUTED") != std::string::npos; }
     void set_muted(bool m) override { run(std::string("wpctl set-mute @DEFAULT_AUDIO_SINK@ ") + (m ? "1" : "0")); }
 
+    // --- media
+    std::vector<Track> music_library() override {
+        std::vector<Track> v;
+        std::string root = home() + "/Music";
+        auto add_dir = [&](const std::string& dir, const std::string& artist) {
+            for (auto& n : list_dir(dir)) {
+                std::string full = dir + "/" + n;
+                if (has_ext(n, {".mp3", ".flac", ".ogg", ".wav", ".m4a", ".opus"}))
+                    v.push_back({full, stem(n), artist, cached_duration(full)});
+            }
+        };
+        add_dir(root, "Music");
+        for (auto& n : list_dir(root)) {  // one level of album/artist folders
+            struct stat st{};
+            if (stat((root + "/" + n).c_str(), &st) == 0 && S_ISDIR(st.st_mode)) add_dir(root + "/" + n, n);
+        }
+        std::sort(v.begin(), v.end(), [](const Track& a, const Track& b) {
+            return a.artist == b.artist ? a.title < b.title : a.artist < b.artist;
+        });
+        return v;
+    }
+
+    bool play(const std::string& path) override {
+        stop();
+        play_pid_ = spawn({"play", "-q", path});
+        if (play_pid_ <= 0) return false;
+        pb_ = PlaybackState{};
+        pb_.path = path;
+        pb_.playing = true;
+        int d = duration_of(path);
+        pb_.dur_ms = d >= 0 ? d * 1000 : -1;
+        clock_.start();
+        return true;
+    }
+    void set_paused(bool p) override {
+        if (play_pid_ <= 0) return;
+#ifndef __EMSCRIPTEN__
+        kill(play_pid_, p ? SIGSTOP : SIGCONT);
+#endif
+        pb_.paused = p;
+        pb_.playing = !p;
+        if (p) clock_.pause(); else clock_.resume();
+    }
+    void stop() override {
+        kill_child(play_pid_, SIGTERM);
+        play_pid_ = -1;
+        pb_ = PlaybackState{};
+    }
+    PlaybackState playback() override {
+        if (play_pid_ > 0) {
+            pb_.pos_ms = int(clock_.ms());
+            if (!pb_.paused && exited(play_pid_)) {
+                play_pid_ = -1;
+                pb_ = PlaybackState{};
+                pb_.finished = true;
+            }
+        }
+        return pb_;
+    }
+
+    std::vector<Track> recordings() override {
+        std::vector<Track> v;
+        std::string dir = home() + "/Recordings";
+        for (auto& n : list_dir(dir)) {
+            if (!has_ext(n, {".wav"})) continue;
+            std::string full = dir + "/" + n;
+            struct stat st{};
+            stat(full.c_str(), &st);
+            char when[32] = "";
+            tm lt{};
+            localtime_r(&st.st_mtime, &lt);
+            strftime(when, sizeof when, "%d %b %H:%M", &lt);
+            // 16 kHz mono 16-bit: 32000 bytes per second after the 44-byte header.
+            v.push_back({full, n, when, int(st.st_size > 44 ? (st.st_size - 44) / 32000 : 0)});
+        }
+        std::sort(v.begin(), v.end(), [](const Track& a, const Track& b) { return a.path > b.path; });
+        return v;
+    }
+    bool record_start() override {
+        if (rec_pid_ > 0) return false;
+        stop();
+        std::string dir = home() + "/Recordings";
+        mkdir(dir.c_str(), 0755);
+        char name[64];
+        time_t now = time(nullptr);
+        tm lt{};
+        localtime_r(&now, &lt);
+        strftime(name, sizeof name, "/note-%Y%m%d-%H%M%S.wav", &lt);
+        rec_ = RecordState{};
+        rec_.path = dir + name;
+        rec_pid_ = spawn({"rec", "-q", "-c", "1", "-r", "16000", "-b", "16", rec_.path});
+        if (rec_pid_ <= 0) return false;
+        rec_.recording = true;
+        rec_clock_.start();
+        return true;
+    }
+    void record_stop() override {
+        kill_child(rec_pid_, SIGINT);  // SIGINT lets sox finish the WAV header
+        rec_pid_ = -1;
+        rec_ = RecordState{};
+    }
+    RecordState record_state() override {
+        if (rec_pid_ > 0 && exited(rec_pid_)) {  // rec died (no mic?)
+            rec_pid_ = -1;
+            rec_ = RecordState{};
+        }
+        if (rec_.recording) rec_.elapsed_ms = int(rec_clock_.ms());
+        return rec_;
+    }
+    bool delete_recording(const std::string& path) override {
+        if (path.rfind(home() + "/Recordings/", 0) != 0) return false;  // only our own files
+        if (pb_.path == path) stop();
+        return std::remove(path.c_str()) == 0;
+    }
+
     void set_led(Led led, bool on) override {
         static const char* keys[] = {"shift", "fn", "sym", "key_led1", "key_led2", "key_led3"};
         const char* key = keys[int(led)];
@@ -260,6 +446,32 @@ public:
     }
 
 private:
+    static std::string home() {
+        const char* h = std::getenv("HOME");
+        return h ? h : "/home/pi";
+    }
+
+    int duration_of(const std::string& path) {
+        int d = cached_duration(path);
+        if (d >= 0) return d;
+        std::string out = run("soxi -D " + shell_quote(path));
+        if (out.empty()) return -1;
+        d = int(std::strtod(out.c_str(), nullptr) + 0.5);
+        durations_.push_back({path, d});
+        return d;
+    }
+    int cached_duration(const std::string& path) {
+        for (auto& p : durations_)
+            if (p.first == path) return p.second;
+        return -1;
+    }
+
+    pid_t play_pid_ = -1, rec_pid_ = -1;
+    PlaybackState pb_;
+    RecordState rec_;
+    PlayClock clock_, rec_clock_;
+    std::vector<std::pair<std::string, int>> durations_;
+
     BatteryInfo read_battery() {
         BatteryInfo b;
         b.percent = int(read_long(bat_ + "capacity", -1));

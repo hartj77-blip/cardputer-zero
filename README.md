@@ -15,12 +15,12 @@ radios, audio, camera, real-time clock, key LEDs and the expansion ports.
 
 | Part | Status |
 | --- | --- |
-| `shell/` ZeroShell: status bar, launcher, 9 apps, toasts, keyboard navigation | Working in the simulator |
+| `shell/` ZeroShell: status bar, launcher, 10 apps, toasts, keyboard navigation | Working in the simulator |
 | `shell/src/hal/` hardware layer: simulated (PC) and Linux (device) | Linux side written, not yet tested on hardware |
 | `image/` image builder on M5's open pi-gen, pinned kernel and drivers | Written, not yet run |
 | `.github/workflows/` CI: simulator, screenshots, arm64 build; manual image build | Ready |
 
-Apps: **Files**, **Notes**, **Wi-Fi**, **IR Remote** (send + learn), **Compass** (with spirit level),
+Apps: **Files**, **Notes**, **Media** (music player + voice notes), **Wi-Fi**, **IR Remote** (send + learn), **Compass** (with spirit level),
 **Battery**, **Clock** (with stopwatch), **System** monitor, **Settings** (Wi-Fi, Bluetooth,
 brightness, volume, mute, restart, shut down).
 
@@ -34,7 +34,7 @@ cmake --build build/sim -j
 ```
 
 Keys: arrows move, **Enter** opens, **Esc** or **`** goes back, letters jump to an app on the home screen.
-Inside apps: **R** rescans Wi-Fi, **L** learns an IR code and **Space** runs the stopwatch. Notes save when you leave.
+Inside apps: **R** rescans Wi-Fi, **L** learns an IR code **Space** pauses music or runs the stopwatch, **N** skips a track, **R** records a voice note. Notes save when you leave.
 
 Or build the browser version (same code, WebAssembly, one HTML file with on-screen keys):
 
