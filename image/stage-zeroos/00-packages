@@ -1,0 +1,17 @@
+network-manager
+bluez
+pipewire
+pipewire-pulse
+wireplumber
+alsa-utils
+sox
+ir-keytable
+v4l-utils
+rpicam-apps-lite
+zram-tools
+console-setup
+policykit-1
+fonts-noto-cjk
+i2c-tools
+python3-smbus2
+adbd

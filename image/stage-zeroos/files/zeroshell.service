@@ -1,0 +1,22 @@
+[Unit]
+Description=ZeroShell (Cardputer Zero home screen)
+After=systemd-user-sessions.service NetworkManager.service sound.target
+Conflicts=getty@tty1.service
+
+[Service]
+User=pi
+Group=pi
+SupplementaryGroups=video input audio netdev i2c gpio
+Environment=HOME=/home/pi
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+# fb0 = LCD, fb1 = HDMI
+Environment=ZS_FRAMEBUFFER=/dev/fb0
+ExecStart=/usr/bin/zeroshell
+Restart=always
+RestartSec=1
+# Keep the UI responsive under memory pressure (512 MB RAM).
+OOMScoreAdjust=-500
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

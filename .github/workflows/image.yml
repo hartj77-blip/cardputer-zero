@@ -1,0 +1,38 @@
+name: Build image
+
+# Manual: builds a flashable .img.xz (1-2 hours). Run it from the Actions tab.
+on:
+  workflow_dispatch:
+    inputs:
+      wifi_country:
+        description: Wi-Fi country code (regulatory domain)
+        default: US
+        required: true
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk space
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc && df -h /
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++-aarch64-linux-gnu qemu-user-static binfmt-support
+      - name: Build ZeroShell (arm64)
+        run: |
+          cmake -S shell -B build/device -DZS_BACKEND=device \
+            -DCMAKE_TOOLCHAIN_FILE=$PWD/cmake/aarch64-linux-gnu.cmake
+          cmake --build build/device -j"$(nproc)"
+          aarch64-linux-gnu-strip build/device/zeroshell
+      - name: Build image
+        env:
+          WIFI_COUNTRY: ${{ inputs.wifi_country }}
+        run: image/build.sh build/device/zeroshell
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zeroos-image
+          path: build/image/pi-gen/deploy/*.img.xz
+          compression-level: 0

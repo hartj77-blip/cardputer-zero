@@ -1,0 +1,7 @@
+#!/bin/sh
+# ZeroOS: ship the ST7789V panel init blob in the initramfs.
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "$1" in prereqs) prereqs; exit 0;; esac
+. /usr/share/initramfs-tools/hook-functions
+add_firmware "cardputerzero,st7789v_lcd.bin" || true
