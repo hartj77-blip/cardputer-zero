@@ -3,6 +3,7 @@
 #include <ctime>
 
 #include "hal/hal.h"
+#include "ui/power.h"
 #include "ui/theme.h"
 
 namespace zs {
@@ -14,6 +15,7 @@ lv_indev_read_cb_t g_orig_read = nullptr;
 uint32_t g_last_key = 0;
 lv_indev_state_t g_last_state = LV_INDEV_STATE_RELEASED;
 bool g_consumed = false;      // the held key belongs to the shell, not LVGL
+bool g_swallowed = false;     // the held key woke the screen; nothing else sees it
 uint32_t g_press_ms = 0, g_repeat_ms = 0;
 constexpr uint32_t kRepeatDelay = 400, kRepeatEvery = 80;
 
@@ -27,7 +29,9 @@ void keypad_hook(lv_indev_t* indev, lv_indev_data_t* data) {
     bool new_press = pressed && (g_last_state == LV_INDEV_STATE_RELEASED || data->key != g_last_key);
     if (pressed) g_last_key = data->key;
     g_last_state = data->state;
-    if (new_press) {
+    if (new_press && power().on_key(lv_tick_get())) {
+        g_swallowed = true;
+    } else if (new_press) {
         g_press_ms = g_repeat_ms = lv_tick_get();
         g_consumed = Shell::get().handle_key(data->key);
     } else if (pressed && g_consumed && lv_tick_elaps(g_press_ms) > kRepeatDelay &&
@@ -36,8 +40,9 @@ void keypad_hook(lv_indev_t* indev, lv_indev_data_t* data) {
         Shell::get().handle_key(data->key);
     } else if (!pressed) {
         g_consumed = false;
+        g_swallowed = false;
     }
-    if (pressed && g_consumed) data->state = LV_INDEV_STATE_RELEASED;  // LVGL never sees it
+    if (pressed && (g_consumed || g_swallowed)) data->state = LV_INDEV_STATE_RELEASED;  // LVGL never sees it
 }
 
 const char* battery_symbol(int pct) {
@@ -91,9 +96,19 @@ void Shell::start(lv_indev_t* keypad) {
     lv_obj_align(toast_, LV_ALIGN_BOTTOM_MID, 0, -6);
     lv_obj_add_flag(toast_, LV_OBJ_FLAG_HIDDEN);
 
+    // Simulator stand-in for the backlight: a black layer over everything.
+    blank_ = lv_obj_create(lv_layer_top());
+    style_plain(blank_);
+    lv_obj_set_size(blank_, kScreenW, kScreenH);
+    lv_obj_set_style_bg_color(blank_, c(0x000000), 0);
+    lv_obj_set_style_bg_opa(blank_, LV_OPA_COVER, 0);
+    lv_obj_remove_flag(blank_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(blank_, LV_OBJ_FLAG_HIDDEN);
+
+    power().start();
     go_home();
     apply_pending();
-    lv_timer_create(tick_cb, 100, this);
+    tick_timer_ = lv_timer_create(tick_cb, 100, this);
     update_statusbar();
 }
 
@@ -141,6 +156,11 @@ void Shell::update_statusbar() {
         snprintf(buf, sizeof buf, " %d%%", b.percent);
         icons += buf;
     }
+    int left = power().minutes_left();
+    if (power().show_time_left() && !b.external_power && left >= 0) {
+        snprintf(buf, sizeof buf, " %d:%02d", left / 60, left % 60);
+        icons += buf;
+    }
     lv_label_set_text(sb_icons_, icons.c_str());
     lv_obj_set_style_text_color(sb_icons_, c(b.percent >= 0 && b.percent < 15 && !b.charging ? kBad : kText), 0);
 }
@@ -148,8 +168,10 @@ void Shell::update_statusbar() {
 void Shell::tick_cb(lv_timer_t* t) {
     auto* s = static_cast<Shell*>(lv_timer_get_user_data(t));
     hal().poll();
+    power().tick(lv_tick_get());
     static int n = 0;
-    if (++n % 10 == 0) s->update_statusbar();
+    // Screen off: the timer runs every 500 ms and nothing is drawn.
+    if (!power().screen_off() && ++n % 10 == 0) s->update_statusbar();
     if (s->app_) s->app_->tick();
     s->apply_pending();
     if (s->toast_until_ && lv_tick_get() > s->toast_until_) {
@@ -249,10 +271,38 @@ bool Shell::handle_key(uint32_t key) {
     return used;
 }
 
+void Shell::screen_changed() {
+    lv_display_t* disp = lv_display_get_default();
+    bool off = power().screen_off();
+    if (!off) {
+        lv_display_enable_invalidation(disp, true);
+        lv_timer_set_period(tick_timer_, 100);
+    }
+    if (!hal().has_backlight()) {
+        // Draw what the backlight would do: dark when off, shaded when dim.
+        if (off || power().dimmed()) {
+            lv_obj_set_style_bg_opa(blank_, off ? LV_OPA_COVER : LV_OPA_50, 0);
+            lv_obj_remove_flag(blank_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(blank_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    if (off) {
+        // Draw the last frame, then stop drawing until the screen wakes.
+        lv_refr_now(disp);
+        lv_display_enable_invalidation(disp, false);
+        lv_timer_set_period(tick_timer_, 500);
+    } else {
+        update_statusbar();
+        lv_obj_invalidate(screen_);
+    }
+}
+
 // Service functions declared in app.h
 void shell_toast(const std::string& msg) { Shell::get().toast(msg); }
 void shell_open_app(const std::string& id) { Shell::get().open_app(id); }
 void shell_go_home() { Shell::get().go_home(); }
 void shell_add_focus(lv_obj_t* obj) { Shell::get().add_focus(obj); }
+void shell_screen_changed() { Shell::get().screen_changed(); }
 
 }  // namespace zs

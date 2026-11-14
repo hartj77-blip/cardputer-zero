@@ -42,5 +42,6 @@ void shell_toast(const std::string& msg);
 void shell_open_app(const std::string& id);
 void shell_go_home();
 void shell_add_focus(lv_obj_t* obj);   // add widget to the current app's focus group
+void shell_screen_changed();            // power manager: screen dimmed, off or on
 
 }  // namespace zs

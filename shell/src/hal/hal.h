@@ -22,6 +22,18 @@ struct BatteryInfo {
     int minutes_left = -1;     // to empty (or to full while charging)
     int health_percent = -1;
     int cycle_count = -1;
+    int power_mw = 0;          // instantaneous draw (V x I), positive
+    int charge_now_mah = -1;   // remaining charge, from the gauge
+    int charge_full_mah = -1;  // what a full charge holds today
+};
+
+// CPU speed policy. The shell picks one from the user's power profile and
+// switches to ScreenOff while the screen is off.
+enum class CpuMode {
+    Saver,         // on-demand, capped at ~70% of top speed
+    Balanced,      // on-demand up to top speed
+    Performance,   // always at top speed
+    ScreenOff,     // lowest speed
 };
 
 struct ImuSample {
@@ -128,6 +140,11 @@ public:
 
     virtual int brightness() = 0;            // 0..100
     virtual void set_brightness(int pct) = 0;
+    // Backlight fully off (and the panel blanked) or back on at brightness().
+    virtual void set_screen_on(bool on) = 0;
+    // False in the simulator: the shell then dims and blanks by drawing.
+    virtual bool has_backlight() = 0;
+    virtual void set_cpu_mode(CpuMode mode) = 0;
     virtual int volume() = 0;                // 0..100
     virtual void set_volume(int pct) = 0;
     virtual bool muted() = 0;

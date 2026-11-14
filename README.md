@@ -17,12 +17,15 @@ radios, audio, camera, real-time clock, key LEDs and the expansion ports.
 | --- | --- |
 | `shell/` ZeroShell: status bar, launcher, 10 apps, toasts, keyboard navigation | Working in the simulator |
 | `shell/src/hal/` hardware layer: simulated (PC) and Linux (device) | Linux side written, not yet tested on hardware |
-| `image/` image builder on M5's open pi-gen, pinned kernel and drivers | Written, not yet run |
-| `.github/workflows/` CI: simulator, screenshots, arm64 build; manual image build | Ready |
+| `image/` image builder on M5's open pi-gen, pinned kernel and drivers | Built in CI on every image change |
+| `.github/workflows/` CI: simulator, screenshots, arm64 build, browser build, full SD image | Ready |
 
 Apps: **Files**, **Notes**, **Media** (music player + voice notes), **Wi-Fi**, **IR Remote** (send + learn), **Compass** (with spirit level),
-**Battery**, **Clock** (with stopwatch), **System** monitor, **Settings** (Wi-Fi, Bluetooth,
-brightness, volume, mute, restart, shut down).
+**Battery** (time left, power draw, power profile), **Clock** (with stopwatch), **System** monitor (CPU and
+where the memory goes), **Settings** (Wi-Fi, Bluetooth, brightness, volume, mute, power profile, screen dimming
+and screen-off, Bluetooth auto-off, restart, shut down).
+
+The screen dims after 30 s idle and turns off after 1 minute on battery; the first key only wakes it.
 
 ## Try it on a PC
 

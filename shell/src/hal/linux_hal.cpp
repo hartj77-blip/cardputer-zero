@@ -273,6 +273,36 @@ public:
         if (pct < 5) pct = 5;  // never fully dark from the slider
         write_str(backlight_ + "brightness", std::to_string(max * pct / 100));
     }
+    bool has_backlight() override { return !backlight_.empty(); }
+    void set_screen_on(bool on) override {
+        // bl_power: 0 = on, 4 = off. fb blank 4 = powerdown (panel sleep).
+        if (!backlight_.empty()) write_str(backlight_ + "bl_power", on ? "0" : "4");
+        const char* fb = std::getenv("ZS_FRAMEBUFFER");
+        std::string name = fb ? fb : "/dev/fb0";
+        name = name.substr(name.rfind('/') + 1);
+        write_str("/sys/class/graphics/" + name + "/blank", on ? "0" : "4");
+    }
+    void set_cpu_mode(CpuMode mode) override {
+        // All four cores share one policy. zeroshell.service makes these
+        // files writable by the video group at start (see zeroos-power-perms).
+        const std::string p = "/sys/devices/system/cpu/cpufreq/policy0/";
+        std::string govs = read_str(p + "scaling_available_governors");
+        auto has = [&](const char* g) { return (" " + govs + " ").find(std::string(" ") + g + " ") != std::string::npos; };
+        const char* dynamic = has("schedutil") ? "schedutil" : has("ondemand") ? "ondemand" : "conservative";
+        long lo = read_long(p + "cpuinfo_min_freq"), hi = read_long(p + "cpuinfo_max_freq");
+        if (hi <= 0) return;
+        std::string gov;
+        long cap = hi;
+        switch (mode) {
+        case CpuMode::Saver: gov = dynamic; cap = pick_freq(p, lo + (hi - lo) * 7 / 10); break;
+        case CpuMode::Balanced: gov = dynamic; break;
+        case CpuMode::Performance: gov = "performance"; break;
+        case CpuMode::ScreenOff: gov = has("powersave") ? "powersave" : dynamic; cap = lo; break;
+        }
+        // Lower the cap before switching to a faster governor, never above it.
+        write_str(p + "scaling_max_freq", std::to_string(cap));
+        write_str(p + "scaling_governor", gov);
+    }
 
     int volume() override {
         std::string o = run("wpctl get-volume @DEFAULT_AUDIO_SINK@");  // "Volume: 0.60 [MUTED]"
@@ -475,6 +505,17 @@ private:
     PlayClock clock_, rec_clock_;
     std::vector<std::pair<std::string, int>> durations_;
 
+    // The highest listed frequency at or below target (or the lowest one).
+    static long pick_freq(const std::string& policy, long target) {
+        std::istringstream in(read_str(policy + "scaling_available_frequencies"));
+        long f, best = 0, lowest = 0;
+        while (in >> f) {
+            if (!lowest || f < lowest) lowest = f;
+            if (f <= target && f > best) best = f;
+        }
+        return best ? best : lowest ? lowest : target;
+    }
+
     BatteryInfo read_battery() {
         BatteryInfo b;
         b.percent = int(read_long(bat_ + "capacity", -1));
@@ -489,6 +530,11 @@ private:
         b.cycle_count = int(read_long(bat_ + "cycle_count", -1));
         long full = read_long(bat_ + "charge_full", 0), design = read_long(bat_ + "charge_full_design", 0);
         b.health_percent = design > 0 ? int(full * 100 / design) : -1;
+        long uv = read_long(bat_ + "voltage_now"), ua = read_long(bat_ + "current_now");
+        b.power_mw = int(std::llabs((long long)uv * ua / 1000000000LL));
+        long now = read_long(bat_ + "charge_now", -1000);
+        b.charge_now_mah = now >= 0 ? int(now / 1000) : -1;
+        b.charge_full_mah = full > 0 ? int(full / 1000) : -1;
         return b;
     }
 
@@ -535,6 +581,11 @@ private:
         std::string ip = run("hostname -I");
         n.ip = ip.substr(0, ip.find(' '));
         n.bt_enabled = run("rfkill list bluetooth").find("Soft blocked: no") != std::string::npos;
+        if (n.bt_enabled) {
+            std::istringstream bt(run("bluetoothctl devices Connected 2>/dev/null"));
+            for (std::string l; std::getline(bt, l);)
+                if (l.rfind("Device ", 0) == 0) ++n.bt_connected;
+        }
         n.ethernet = read_str("/sys/class/net/eth0/operstate") == "up";
         n.usb_gadget = read_str("/sys/class/net/usb0/operstate") == "up";
         return n;

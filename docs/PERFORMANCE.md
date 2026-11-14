@@ -23,6 +23,40 @@ as they come in.
 | Removed: armhf, nexmon, plymouth, desktop packages | `stage-zeroos/01-run.sh` | Smaller image, fewer things starting. |
 | ZeroShell instead of a desktop | `shell/` | One small C++ process (LVGL) with a fixed 512 KB UI memory pool. |
 
+## Battery
+
+Stock idle draw is reported at about 2.5 W, which drains the 1750 mAh cell
+(about 6.5 Wh) in under 3 hours. The Pi has no suspend, so ZeroOS saves power
+by doing less while awake and almost nothing while the screen is off.
+
+| What | Default | Where |
+| --- | --- | --- |
+| Dim the backlight to 10% | after 30 s idle | Settings → Dim screen after |
+| Backlight and panel off, CPU to lowest speed, UI stops drawing | after 1 min idle, on battery only | Settings → Screen off after |
+| First key after screen-off only wakes the screen | always | `ui/power.cpp` |
+| Power profile: Saver (on-demand, capped near 70% speed), Balanced (on-demand to full speed), Performance (full speed) | Balanced | Settings, or P in the Battery app |
+| Low battery: Saver turns on by itself | 15% | `ui/power.cpp` |
+| Clean shutdown | 3% | `ui/power.cpp` |
+| Bluetooth off when nothing is connected | after 10 min | Settings → Bluetooth auto-off |
+| Wi-Fi off while the screen is off | off by default (after 10 min when on) | Settings → Wi-Fi off with screen |
+| Wi-Fi chip power save between beacons | on | `files/nm-wifi-powersave.conf` |
+| Main loop sleeps until the next timer or key, instead of waking every 5 ms | always | `platform.cpp` |
+| Screen off: keyboard and redraw timers stop; the loop wakes about every 2 s or on a key | always | `platform.cpp` |
+| Logs in RAM, background jobs off | always | step 1 |
+
+**Time left** in the top bar and the Battery app comes from our own average of
+the gauge's voltage x current with a 3-minute time constant, divided into the
+gauge's remaining charge. The gauge's own estimate is used for the first 30 s
+and while charging. Turn it off in Settings → Time left in top bar.
+
+ZeroShell runs as `pi`; `zeroshell.service` runs `/usr/lib/zeroos/power-perms`
+as root first, which lets the `video` group change the CPU governor and top
+speed and blank the panel.
+
+Still to measure on the unit: real draw in each profile with the screen on,
+dimmed and off; whether the speaker amplifier draws power while silent; how
+much Wi-Fi power save and Bluetooth off actually save.
+
 ## Measured so far
 
 These were measured in the cloud build machine, not on the device.
@@ -48,7 +82,8 @@ System app shows the real number under Memory → This UI.
 | Boot to UI | **(measure)** | under 20 s |
 | Services running | **(measure)** | ~15 |
 | Idle CPU (screen on, Wi-Fi up) | **(measure)** | under 3% |
-| Idle power | **(measure)** | 0.7-1.0 W, about 6-9 h on the 1750 mAh cell |
+| Idle power, screen on | **(measure)** | 0.7-1.0 W, about 6-9 h on the 1750 mAh cell |
+| Idle power, screen off | **(measure)** | 0.4-0.6 W, 11-16 h |
 
 The zram figure works like this: 768 MB of swap space at a 2.5-3x
 compression ratio takes about 260-300 MB of real RAM when completely full.

@@ -29,6 +29,7 @@ if [ ! -x "$ZEROSHELL_BIN" ]; then
     echo "build it with: cmake -S shell -B build/device -DZS_BACKEND=device && cmake --build build/device" >&2
     exit 1
 fi
+ZEROSHELL_BIN=$(realpath "$ZEROSHELL_BIN")   # we cd into pi-gen below
 
 mkdir -p "$WORK"
 if [ ! -d "$WORK/pi-gen/.git" ]; then

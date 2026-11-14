@@ -17,6 +17,8 @@ install -m 0644 files/journald.conf          "${ROOTFS_DIR}/etc/systemd/journald
 install -m 0644 files/earlyoom               "${ROOTFS_DIR}/etc/default/earlyoom"
 install -m 0644 files/zeroos-cloud-init-once.service "${ROOTFS_DIR}/etc/systemd/system/"
 install -m 0755 files/zeroos-measure         "${ROOTFS_DIR}/usr/bin/zeroos-measure"
+install -D -m 0755 files/zeroos-power-perms  "${ROOTFS_DIR}/usr/lib/zeroos/power-perms"
+install -D -m 0644 files/nm-wifi-powersave.conf "${ROOTFS_DIR}/etc/NetworkManager/conf.d/90-zeroos-powersave.conf"
 cat files/initramfs-modules >>               "${ROOTFS_DIR}/etc/initramfs-tools/modules"
 install -m 0755 files/initramfs-hook         "${ROOTFS_DIR}/etc/initramfs-tools/hooks/zeroos-panel"
 

@@ -1,0 +1,211 @@
+#include "ui/power.h"
+
+#include <algorithm>
+#include <cmath>
+
+#include "platform/platform.h"
+#include "ui/app.h"
+#include "ui/prefs.h"
+
+namespace zs {
+
+namespace {
+constexpr int kDimPct = 10;
+constexpr int kLowBattery = 15, kCriticalBattery = 3;
+constexpr uint32_t kWifiSleepAfterMs = 10 * 60 * 1000;
+constexpr double kNominalV = 3.7;        // for mAh -> mWh
+constexpr int kDesignMwh = 6475;         // 1750 mAh x 3.7 V
+}  // namespace
+
+Power& Power::get() {
+    static Power p;
+    return p;
+}
+
+const char* Power::profile_name(Profile p) {
+    switch (p) {
+    case Profile::Saver: return "Saver";
+    case Profile::Performance: return "Performance";
+    default: return "Balanced";
+    }
+}
+
+void Power::start() {
+    profile_ = Profile(std::clamp(prefs::get_int("power.profile", 1), 0, 2));
+    brightness_ = std::clamp(prefs::get_int("display.brightness", 80), 5, 100);
+    dim_after_s_ = prefs::get_int("display.dim_after", 30);
+    off_after_s_ = prefs::get_int("display.off_after", 60);
+    bt_auto_off_min_ = prefs::get_int("bluetooth.auto_off", 10);
+    wifi_sleep_ = prefs::get_int("wifi.sleep", 0) != 0;
+    show_time_left_ = prefs::get_int("statusbar.time_left", 1) != 0;
+    hal().set_brightness(brightness_);
+    apply_cpu();
+}
+
+Profile Power::effective_profile() const { return low_saver_ ? Profile::Saver : profile_; }
+
+void Power::apply_cpu() {
+    if (state_ == State::Off) {
+        hal().set_cpu_mode(CpuMode::ScreenOff);
+        return;
+    }
+    switch (effective_profile()) {
+    case Profile::Saver: hal().set_cpu_mode(CpuMode::Saver); break;
+    case Profile::Performance: hal().set_cpu_mode(CpuMode::Performance); break;
+    default: hal().set_cpu_mode(CpuMode::Balanced); break;
+    }
+}
+
+void Power::set_profile(Profile p) {
+    profile_ = p;
+    if (p != Profile::Saver) low_saver_ = false;   // the user overrides the low-battery saver
+    prefs::set_int("power.profile", int(p));
+    apply_cpu();
+}
+
+void Power::cycle_profile() { set_profile(Profile((int(profile_) + 1) % 3)); }
+
+void Power::set_user_brightness(int pct) {
+    brightness_ = std::clamp(pct, 5, 100);
+    prefs::set_int("display.brightness", brightness_);
+    if (state_ == State::On) hal().set_brightness(brightness_);
+}
+
+void Power::set_dim_after_s(int s) { dim_after_s_ = s; prefs::set_int("display.dim_after", s); }
+void Power::set_off_after_s(int s) { off_after_s_ = s; prefs::set_int("display.off_after", s); }
+void Power::set_bt_auto_off_min(int m) { bt_auto_off_min_ = m; prefs::set_int("bluetooth.auto_off", m); }
+void Power::set_wifi_sleep(bool on) { wifi_sleep_ = on; prefs::set_int("wifi.sleep", on); }
+void Power::set_show_time_left(bool on) { show_time_left_ = on; prefs::set_int("statusbar.time_left", on); }
+
+void Power::set_state(State s, uint32_t now_ms) {
+    if (s == state_) return;
+    State old = state_;
+    state_ = s;
+    switch (s) {
+    case State::On:
+        if (old == State::Off) {
+            hal().set_screen_on(true);
+            platform_set_low_power(false);
+            if (wifi_slept_) {
+                hal().set_wifi_enabled(true);
+                wifi_slept_ = false;
+            }
+        }
+        hal().set_brightness(brightness_);
+        break;
+    case State::Dim:
+        hal().set_brightness(std::min(brightness_, kDimPct));
+        break;
+    case State::Off:
+        off_since_ = now_ms;
+        hal().set_screen_on(false);
+        platform_set_low_power(true);
+        break;
+    }
+    apply_cpu();
+    shell_screen_changed();
+}
+
+bool Power::on_key(uint32_t now_ms) {
+    last_input_ = now_ms;
+    bool was_off = state_ == State::Off;
+    set_state(State::On, now_ms);
+    return was_off;   // the key that wakes the screen does nothing else
+}
+
+void Power::update_estimate(const BatteryInfo& b, uint32_t now_ms) {
+    if (b.external_power != was_external_) {   // plugged or unplugged: start over
+        was_external_ = b.external_power;
+        avg_ms_ = 0;
+    }
+    uint32_t dt = last_sample_ ? now_ms - last_sample_ : 0;
+    last_sample_ = now_ms;
+    if (b.power_mw <= 0) return;
+    if (avg_ms_ == 0) {
+        avg_mw_ = b.power_mw;
+        avg_ms_ = 1;
+    } else if (dt > 0) {
+        // Exponential average with a 3-minute time constant: steady enough
+        // to read, quick enough to follow the screen turning off.
+        double a = 1.0 - std::exp(-double(dt) / 180000.0);
+        avg_mw_ += a * (b.power_mw - avg_mw_);
+        avg_ms_ += dt;
+    }
+
+    minutes_left_ = -1;
+    if (b.external_power) {
+        minutes_left_ = b.charging ? b.minutes_left : -1;   // the gauge knows charging best
+        return;
+    }
+    double left_mwh = b.charge_now_mah >= 0 ? b.charge_now_mah * kNominalV
+                                            : kDesignMwh * std::max(b.percent, 0) / 100.0;
+    if (avg_ms_ >= 30000 && avg_mw_ > 50)
+        minutes_left_ = int(left_mwh / avg_mw_ * 60.0);
+    else
+        minutes_left_ = b.minutes_left;   // the gauge's own figure until ours settles
+}
+
+void Power::tick(uint32_t now_ms) {
+    auto& h = hal();
+    if (!last_input_) last_input_ = now_ms;
+    BatteryInfo b = h.battery();
+    update_estimate(b, now_ms);
+
+    // Screen: dim, then off. Plugged in: dim only, never off.
+    uint32_t idle = now_ms - last_input_;
+    if (state_ != State::Off) {
+        if (off_after_s_ > 0 && !b.external_power && idle >= uint32_t(off_after_s_) * 1000)
+            set_state(State::Off, now_ms);
+        else if (dim_after_s_ > 0 && idle >= uint32_t(dim_after_s_) * 1000)
+            set_state(State::Dim, now_ms);
+    }
+
+    // Wi-Fi sleep: off after a long screen-off; nothing is using it.
+    if (state_ == State::Off && wifi_sleep_ && !wifi_slept_ && now_ms - off_since_ >= kWifiSleepAfterMs &&
+        !h.playback().playing) {
+        NetStatus n = h.net();
+        if (n.wifi_enabled) {
+            h.set_wifi_enabled(false);
+            wifi_slept_ = true;
+        }
+    }
+
+    // Bluetooth: off when nothing has been connected for a while.
+    NetStatus n = h.net();
+    if (n.bt_enabled && n.bt_connected == 0 && bt_auto_off_min_ > 0) {
+        if (!bt_idle_since_) bt_idle_since_ = now_ms;
+        if (now_ms - bt_idle_since_ >= uint32_t(bt_auto_off_min_) * 60000) {
+            h.set_bt_enabled(false);
+            bt_idle_since_ = 0;
+            shell_toast("Bluetooth off: nothing connected");
+        }
+    } else {
+        bt_idle_since_ = 0;
+    }
+
+    // Low battery.
+    if (b.percent >= 0 && !b.external_power) {
+        if (b.percent <= kLowBattery && !low_saver_ && profile_ != Profile::Saver) {
+            low_saver_ = true;
+            apply_cpu();
+            shell_toast("Battery low: Saver on");
+        }
+        if (b.percent <= kCriticalBattery) {
+            if (!shutdown_warned_) {
+                shutdown_warned_ = true;
+                set_state(State::On, now_ms);
+                shell_toast("Battery empty: shutting down");
+            } else {
+                h.power_off();
+            }
+        }
+    } else if (b.external_power) {
+        shutdown_warned_ = false;
+        if (low_saver_ && b.percent > kLowBattery + 5) {
+            low_saver_ = false;
+            apply_cpu();
+        }
+    }
+}
+
+}  // namespace zs

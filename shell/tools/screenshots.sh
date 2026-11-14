@@ -30,6 +30,8 @@ STEPS+=",open:media,down,down,enter,wait:2600,shot:13-media-music.ppm"
 STEPS+=",right,key:r,wait:3200,shot:14-media-recording.ppm"
 STEPS+=",key:r,wait:300,shot:15-media-voice-notes.ppm"
 STEPS+=",open:settings,down,down,shot:12-settings.ppm"
+STEPS+=",open:settings,down,down,down,down,down,down,down,down,wait:300,shot:17-settings-power.ppm"
+STEPS+=",home,wait:31000,shot:18-screen-dimmed.ppm"
 
 (cd "$OUT" && HOME="$DEMO" TZ=UTC "$BIN" --script "$STEPS")
 python3 "$HERE/ppm2png.py" "$OUT"

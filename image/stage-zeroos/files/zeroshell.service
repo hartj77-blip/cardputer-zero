@@ -11,6 +11,8 @@ Environment=HOME=/home/pi
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 # fb0 = LCD, fb1 = HDMI
 Environment=ZS_FRAMEBUFFER=/dev/fb0
+# "+" runs as root: open up the CPU speed and screen power files to video.
+ExecStartPre=+/usr/lib/zeroos/power-perms
 ExecStart=/usr/bin/zeroshell
 Restart=always
 RestartSec=1

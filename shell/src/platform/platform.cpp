@@ -3,6 +3,7 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -47,7 +48,14 @@ int platform_run_script(const std::string&) {
     return 2;
 }
 
+void platform_set_low_power(bool) {}
+
 #elif ZS_BACKEND_DEVICE
+namespace {
+lv_indev_t* g_keypad = nullptr;
+int g_kb_fd = -1;
+bool g_low_power = false;
+}  // namespace
 // ---------------------------------------------------------------- device
 namespace {
 // The keyboard is a TCA8418 matrix exposed as an evdev device. Prefer it by
@@ -81,13 +89,39 @@ lv_indev_t* platform_init(int, int, int) {
     lv_indev_t* in = lv_evdev_create(LV_INDEV_TYPE_KEYPAD, kb.c_str());
     // Keys would also reach the Linux console on tty1 behind us (a known
     // stock-image problem); the image masks getty@tty1 to prevent that.
+    g_keypad = in;
+    // lv_evdev_t keeps the device fd as its first member (LVGL 9.2, pinned).
+    if (void* dsc = lv_indev_get_driver_data(in)) g_kb_fd = *static_cast<int*>(dsc);
     return in;
+}
+
+void platform_set_low_power(bool on) {
+    // Screen off: stop the 30 Hz keyboard and redraw timers so the CPU can
+    // stay idle; the main loop sleeps in poll() until a key arrives.
+    if (on == g_low_power) return;
+    g_low_power = on;
+    lv_timer_t* timers[] = {g_keypad ? lv_indev_get_read_timer(g_keypad) : nullptr,
+                            lv_display_get_refr_timer(lv_display_get_default())};
+    for (lv_timer_t* t : timers) {
+        if (!t) continue;
+        if (on) lv_timer_pause(t);
+        else lv_timer_resume(t);
+    }
 }
 
 int platform_run() {
     for (;;) {
         uint32_t ms = lv_timer_handler();
-        usleep((ms > 5 ? 5 : ms) * 1000);
+        // Sleep until the next LVGL timer is due or a key arrives, instead of
+        // waking every few ms. Awake, keys are also read on LVGL's own timer.
+        uint32_t cap = g_low_power ? 2000 : 33;
+        if (ms == LV_NO_TIMER_READY || ms > cap) ms = cap;
+        if (g_kb_fd >= 0) {
+            pollfd p{g_kb_fd, POLLIN, 0};
+            if (poll(&p, 1, int(ms)) > 0 && g_keypad) lv_indev_read(g_keypad);
+        } else {
+            usleep(ms * 1000);
+        }
     }
 }
 
@@ -209,6 +243,7 @@ int platform_run() {
 }
 
 int platform_run_script(const std::string&) { return 2; }
+void platform_set_low_power(bool) {}
 
 #else
 // ---------------------------------------------------------------- headless
@@ -336,6 +371,8 @@ int platform_run_script(const std::string& script) {
     }
     return failures ? 1 : 0;
 }
+void platform_set_low_power(bool) {}
+
 #endif
 
 }  // namespace zs

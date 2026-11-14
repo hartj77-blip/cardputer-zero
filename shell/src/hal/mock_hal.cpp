@@ -24,6 +24,18 @@ public:
         b.minutes_left = 152;
         b.health_percent = 99;
         b.cycle_count = 3;
+        // A plausible draw that follows what the shell asked for.
+        // Illustrative (measure on the unit): ~0.6 W base + backlight.
+        int mw = cpu_ == CpuMode::Performance ? 780 : cpu_ == CpuMode::Saver ? 560 : 620;
+        if (cpu_ == CpuMode::ScreenOff) mw = 430;
+        if (screen_on_) mw += brightness_ * 4;
+        if (bt_on_) mw += 40;
+        if (pb_.playing) mw += 180;
+        mw += int(30 * std::sin(ticks_ * 0.05));
+        b.power_mw = mw;
+        b.current_ma = -mw * 1000 / b.voltage_mv;
+        b.charge_full_mah = 1730;
+        b.charge_now_mah = 1730 * b.percent / 100;
         return b;
     }
 
@@ -46,7 +58,7 @@ public:
         n.wifi_signal = 72;
         n.ip = wifi_on_ ? "192.168.1.42" : "";
         n.bt_enabled = bt_on_;
-        n.bt_connected = bt_on_ ? 1 : 0;
+        n.bt_connected = bt_on_ && bt_paired_ ? 1 : 0;
         return n;
     }
 
@@ -100,10 +112,13 @@ public:
         return true;
     }
     void set_wifi_enabled(bool on) override { wifi_on_ = on; }
-    void set_bt_enabled(bool on) override { bt_on_ = on; }
+    void set_bt_enabled(bool on) override { bt_on_ = on; bt_paired_ = false; }
 
     int brightness() override { return brightness_; }
     void set_brightness(int p) override { brightness_ = p; }
+    void set_screen_on(bool on) override { screen_on_ = on; }
+    bool has_backlight() override { return false; }
+    void set_cpu_mode(CpuMode m) override { cpu_ = m; }
     int volume() override { return volume_; }
     void set_volume(int p) override { volume_ = p; }
     bool muted() override { return muted_; }
@@ -209,10 +224,13 @@ private:
     long ticks_ = 0;
     bool wifi_on_ = true;
     bool bt_on_ = true;
+    bool bt_paired_ = true;   // headphones "connected" until Bluetooth is toggled
     std::string connected_ssid_ = "HomeNet";
     int brightness_ = 80;
     int volume_ = 60;
     bool muted_ = false;
+    bool screen_on_ = true;
+    CpuMode cpu_ = CpuMode::Balanced;
 };
 
 }  // namespace
