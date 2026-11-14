@@ -34,7 +34,14 @@ cmake --build build/sim -j
 ```
 
 Keys: arrows move, **Enter** opens, **Esc** or **`** goes back, letters jump to an app on the home screen.
-Inside apps: **R** rescans Wi-Fi, **L** learns an IR code, **Space** runs the stopwatch, **Ctrl+S** saves a note.
+Inside apps: **R** rescans Wi-Fi, **L** learns an IR code and **Space** runs the stopwatch. Notes save when you leave.
+
+Or build the browser version (same code, WebAssembly, one HTML file with on-screen keys):
+
+```sh
+source /path/to/emsdk/emsdk_env.sh
+web/build.sh build/zeroos-simulator.html
+```
 
 Render all screens to PNG (what CI does):
 

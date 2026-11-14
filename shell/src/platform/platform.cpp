@@ -3,9 +3,15 @@
 
 #include <dirent.h>
 #include <fcntl.h>
-#include <linux/input.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <unistd.h>
+#if ZS_BACKEND_DEVICE
+#include <linux/input.h>
+#endif
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 
 #include <cstdio>
 #include <cstdlib>
@@ -88,6 +94,120 @@ int platform_run_script(const std::string&) {
     std::fprintf(stderr, "--script needs the headless build\n");
     return 2;
 }
+
+#elif defined(__EMSCRIPTEN__)
+// ---------------------------------------------------------------- web
+// Browser demo: LVGL renders into an RGBA frame that the page copies to a
+// canvas; the page feeds keys in through zs_web_key(). Simulated hardware.
+namespace {
+std::vector<uint8_t> g_rgba;
+int g_w = 0, g_h = 0;
+std::deque<uint32_t> g_keys;
+bool g_pressed = false;
+uint32_t g_cur = 0;
+int g_dirty = 0;
+
+void flush_cb(lv_display_t* d, const lv_area_t* a, uint8_t* px) {
+    int w = lv_area_get_width(a);
+    auto* src = reinterpret_cast<uint16_t*>(px);
+    for (int y = a->y1; y <= a->y2; ++y) {
+        for (int x = a->x1; x <= a->x2; ++x) {
+            uint16_t c = src[(y - a->y1) * w + (x - a->x1)];
+            uint8_t* o = &g_rgba[(y * g_w + x) * 4];
+            o[0] = uint8_t(((c >> 11) & 0x1f) * 255 / 31);
+            o[1] = uint8_t(((c >> 5) & 0x3f) * 255 / 63);
+            o[2] = uint8_t((c & 0x1f) * 255 / 31);
+            o[3] = 255;
+        }
+    }
+    g_dirty = 1;
+    lv_display_flush_ready(d);
+}
+
+void read_cb(lv_indev_t*, lv_indev_data_t* data) {
+    if (g_pressed) {
+        data->key = g_cur;
+        data->state = LV_INDEV_STATE_RELEASED;
+        g_pressed = false;
+    } else if (!g_keys.empty()) {
+        g_cur = g_keys.front();
+        g_keys.pop_front();
+        data->key = g_cur;
+        data->state = LV_INDEV_STATE_PRESSED;
+        g_pressed = true;
+    } else {
+        data->key = g_cur;
+        data->state = LV_INDEV_STATE_RELEASED;
+    }
+    // Drain queued keys within one LVGL cycle so fast typing keeps up.
+    data->continue_reading = g_pressed || !g_keys.empty();
+}
+
+uint32_t tick_cb() { return uint32_t(emscripten_get_now()); }
+
+void write_file(const std::string& path, const std::string& text) {
+    if (FILE* f = std::fopen(path.c_str(), "w")) {
+        std::fputs(text.c_str(), f);
+        std::fclose(f);
+    }
+}
+
+// Demo files so Files and Notes have something to show.
+void seed_home() {
+    const char* home = "/home/pi";
+    mkdir("/home", 0755);
+    mkdir(home, 0755);
+    for (const char* d : {"Documents", "Music", "Pictures", "Projects"})
+        mkdir((std::string(home) + "/" + d).c_str(), 0755);
+    write_file("/home/pi/notes.txt",
+               "Shopping: solder, heat shrink, 18650s\n\nIdeas:\n- LoRa chat cap\n- IR macro for the TV\n");
+    write_file("/home/pi/Projects/README.md", "# my project\n\nNotes about the build.\n");
+    write_file("/home/pi/Documents/todo.txt", "- flash ZeroOS\n- learn TV remote\n- calibrate compass\n");
+    write_file("/home/pi/Music/playlist.m3u", "#EXTM3U\n");
+    setenv("HOME", home, 1);
+}
+}  // namespace
+
+extern "C" {
+EMSCRIPTEN_KEEPALIVE void zs_web_key(uint32_t key) { g_keys.push_back(key); }
+EMSCRIPTEN_KEEPALIVE uint8_t* zs_web_frame() { return g_rgba.data(); }
+// Open an app by its position in the launcher (-1 = home).
+EMSCRIPTEN_KEEPALIVE void zs_web_open(int index) {
+    const auto& apps = app_registry();
+    if (index >= 0 && index < int(apps.size())) shell_open_app(apps[index].id);
+    else shell_go_home();
+}
+EMSCRIPTEN_KEEPALIVE int zs_web_take_dirty() {
+    int d = g_dirty;
+    g_dirty = 0;
+    return d;
+}
+}
+
+lv_indev_t* platform_init(int w, int h, int) {
+    seed_home();
+    g_w = w;
+    g_h = h;
+    g_rgba.assign(size_t(w) * h * 4, 255);
+    lv_tick_set_cb(tick_cb);
+    lv_display_t* d = lv_display_create(w, h);
+    lv_display_set_color_format(d, LV_COLOR_FORMAT_RGB565);
+    static std::vector<uint8_t> buf(size_t(w) * h * 2);
+    lv_display_set_buffers(d, buf.data(), nullptr, buf.size(), LV_DISPLAY_RENDER_MODE_PARTIAL);
+    lv_display_set_flush_cb(d, flush_cb);
+    lv_indev_t* in = lv_indev_create();
+    lv_indev_set_type(in, LV_INDEV_TYPE_KEYPAD);
+    lv_indev_set_read_cb(in, read_cb);
+    lv_indev_set_long_press_time(in, 60000);  // each tap is one press
+    return in;
+}
+
+int platform_run() {
+    emscripten_set_main_loop([] { lv_timer_handler(); }, 0, false);
+    return 0;
+}
+
+int platform_run_script(const std::string&) { return 2; }
 
 #else
 // ---------------------------------------------------------------- headless

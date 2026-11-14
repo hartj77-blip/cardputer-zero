@@ -1,0 +1,280 @@
+<title>ZeroOS Simulator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: a handheld body (screen over keys) centred on a dark bench; notes beside it on wide screens, below on phones. */
+:root {
+  --bench: #0d1014;
+  --shell: #1d232b;
+  --shell-edge: #2c3540;
+  --key: #2a323c;
+  --key-down: #ff8a1f;
+  --ink: #e6edf3;
+  --muted: #8b97a5;
+  --accent: #ff8a1f;
+  --font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { background: var(--bench); color: var(--ink); }
+body {
+  font-family: var(--font-body);
+  margin: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 32px;
+}
+.wrap {
+  max-width: 1040px; margin: 0 auto;
+  display: grid; grid-template-columns: minmax(0, 600px) minmax(0, 1fr); gap: 32px; align-items: start;
+}
+@media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr); gap: 20px; } }
+
+.device {
+  background: linear-gradient(180deg, var(--shell-edge), var(--shell) 18%);
+  border-radius: 22px; padding: 14px 14px 16px;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 24px 60px rgba(0,0,0,0.45);
+  display: grid; gap: 12px;
+  touch-action: manipulation; user-select: none; -webkit-user-select: none;
+}
+.bezel { background: #050607; border-radius: 10px; padding: 10px; display: grid; gap: 6px; }
+canvas {
+  width: 100%; aspect-ratio: 320 / 170; max-width: 100%;
+  image-rendering: pixelated; image-rendering: crisp-edges;
+  border-radius: 3px; display: block; background: #0b0f14; outline: none;
+}
+.bezel-label { display: flex; justify-content: space-between; font: 500 10px/1 var(--font-mono); color: #5b6673; letter-spacing: 0.08em; text-transform: uppercase; }
+.loading { position: relative; }
+.loading::after {
+  content: "Booting ZeroOS…"; position: absolute; inset: 0; display: grid; place-items: center;
+  font: 500 13px var(--font-mono); color: var(--muted);
+}
+.ready .loading::after { content: none; }
+
+.controls { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: stretch; }
+.pad { display: grid; grid-template-columns: repeat(3, 44px); grid-template-rows: repeat(3, 40px); gap: 5px; align-self: center; }
+.pad .up { grid-column: 2; grid-row: 1; } .pad .left { grid-column: 1; grid-row: 2; }
+.pad .ok { grid-column: 2; grid-row: 2; } .pad .right { grid-column: 3; grid-row: 2; }
+.pad .down { grid-column: 2; grid-row: 3; } .pad .back { grid-column: 1; grid-row: 1; } .pad .tab { grid-column: 3; grid-row: 1; }
+.keys { display: grid; gap: 5px; min-width: 0; }
+.row { display: grid; gap: 5px; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+button.k {
+  appearance: none; border: 0; border-radius: 7px; min-height: 38px; padding: 0;
+  background: var(--key); color: var(--ink);
+  font: 500 14px/1 var(--font-mono);
+  box-shadow: 0 2px 0 #12161b; cursor: pointer;
+  transition: background 60ms, transform 60ms;
+}
+button.k.wide2 { grid-column: span 2; } button.k.wide4 { grid-column: span 4; }
+button.k.mod { color: var(--muted); font-size: 12px; }
+button.k.mod.on { color: var(--accent); }
+button.k.ok { background: #3a2a1a; color: var(--accent); }
+button.k.down, button.k:active { background: var(--key-down); color: #111; transform: translateY(1px); box-shadow: none; }
+button.k:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (max-width: 520px) {
+  .controls { grid-template-columns: 1fr; }
+  .pad { justify-self: center; grid-template-columns: repeat(3, 56px); }
+  button.k { min-height: 40px; font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) { button.k { transition: none; } }
+
+.notes { display: grid; gap: 18px; min-width: 0; }
+h1 { font: 700 30px/1.1 var(--font-display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 span { color: var(--accent); }
+.lede { color: var(--muted); line-height: 1.55; margin: 0; max-width: 60ch; }
+h2 { font: 500 12px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin: 0 0 8px; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 14px; }
+dt { font-family: var(--font-mono); font-size: 12px; color: var(--ink); background: var(--key); border-radius: 5px; padding: 3px 7px; justify-self: start; }
+dd { margin: 0; color: var(--muted); align-self: center; }
+.apps { display: flex; flex-wrap: wrap; gap: 6px; }
+.apps button {
+  appearance: none; border: 1px solid var(--shell-edge); background: transparent; color: var(--ink);
+  border-radius: 999px; padding: 5px 11px; font: 500 13px var(--font-body); cursor: pointer;
+}
+.apps button:hover, .apps button:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+.fine { font-size: 12px; color: #6b7682; line-height: 1.5; margin: 0; }
+</style>
+
+<div class="wrap">
+  <div class="device" id="device">
+    <div class="bezel">
+      <div class="loading"><canvas id="screen" width="320" height="170" tabindex="0" aria-label="ZeroOS screen. Click, then use your keyboard."></canvas></div>
+      <div class="bezel-label"><span>320 × 170 · ST7789V3</span><span id="status">keyboard: click screen</span></div>
+    </div>
+    <div class="controls">
+      <div class="pad" aria-label="Navigation keys">
+        <button class="k mod back" data-key="27" title="Back (Esc)">Back</button>
+        <button class="k up" data-key="17" aria-label="Up">▲</button>
+        <button class="k mod tab" data-key="9" title="Next field (Tab)">Tab</button>
+        <button class="k left" data-key="20" aria-label="Left">◀</button>
+        <button class="k ok" data-key="10" aria-label="Enter">OK</button>
+        <button class="k right" data-key="19" aria-label="Right">▶</button>
+        <button class="k down" data-key="18" aria-label="Down">▼</button>
+      </div>
+      <div class="keys" id="keys" aria-label="Keyboard"></div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h1>Zero<span>OS</span> simulator</h1>
+    <p class="lede">This is the real ZeroShell code from the cardputer-zero repo, compiled to WebAssembly and running at the Cardputer Zero's native 320 × 170. Sensors, battery and Wi-Fi are simulated until the hardware arrives.</p>
+    <section>
+      <h2>Jump to an app</h2>
+      <div class="apps" id="apps"></div>
+    </section>
+    <section>
+      <h2>Keys</h2>
+      <dl>
+        <dt>← ↑ → ↓</dt><dd>Move around the home screen and lists</dd>
+        <dt>Enter / OK</dt><dd>Open an app or choose an item</dd>
+        <dt>Esc / Back</dt><dd>Go back (the ` key does the same, like on the device)</dd>
+        <dt>a–z</dt><dd>On the home screen, jump to the app starting with that letter</dd>
+        <dt>R · L · Space</dt><dd>Rescan Wi-Fi · learn an IR code · start the stopwatch</dd>
+      </dl>
+    </section>
+    <p class="fine">Notes and IR codes you change live in this browser tab only and reset on reload. Build v0.1.0, Phase 0.</p>
+  </div>
+</div>
+
+<script>
+/*__ZEROSHELL_JS__*/
+</script>
+<script>
+(function () {
+  const KEY = { up: 17, down: 18, right: 19, left: 20, enter: 10, esc: 27, bksp: 8, tab: 9, del: 127 };
+  const canvas = document.getElementById("screen");
+  const ctx = canvas.getContext("2d");
+  const img = ctx.createImageData(320, 170);
+  const status = document.getElementById("status");
+  let mod = null;
+
+  function send(code) { if (mod) mod._zs_web_key(code >>> 0); }
+  function typeText(s) { for (const ch of s) send(ch.codePointAt(0)); }
+
+  // Screen refresh: copy the RGBA frame whenever LVGL flushed something.
+  function frame() {
+    if (mod && mod._zs_web_take_dirty()) {
+      const ptr = mod._zs_web_frame();
+      img.data.set(mod.HEAPU8.subarray(ptr, ptr + 320 * 170 * 4));
+      ctx.putImageData(img, 0, 0);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // Physical keyboard (desktop).
+  const map = { ArrowUp: KEY.up, ArrowDown: KEY.down, ArrowLeft: KEY.left, ArrowRight: KEY.right,
+                Enter: KEY.enter, Escape: KEY.esc, Backspace: KEY.bksp, Tab: KEY.tab, Delete: KEY.del };
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target.closest && e.target.closest(".apps")) return;
+    let code = map[e.key];
+    if (code === undefined && e.key.length === 1) code = e.key.codePointAt(0);
+    if (code === undefined) return;
+    e.preventDefault();
+    send(code);
+  });
+  canvas.addEventListener("focus", () => { status.textContent = "keyboard: on"; });
+  canvas.addEventListener("blur", () => { status.textContent = "keyboard: on (page)"; });
+
+  // On-screen keyboard with letters and a symbol layer.
+  const layers = {
+    abc: [["q","w","e","r","t","y","u","i","o","p"],
+          ["a","s","d","f","g","h","j","k","l","'"],
+          ["shift","z","x","c","v","b","n","m","bksp"],
+          ["sym","`","space","-","enter"]],
+    sym: [["1","2","3","4","5","6","7","8","9","0"],
+          ["@","#","$","%","&","*","(",")","/",":"],
+          ["shift","!","?",",",".",";","\"","+","bksp"],
+          ["abc","_","space","=","enter"]],
+  };
+  const labels = { shift: "⇧", bksp: "⌫", space: "space", enter: "↵", sym: "123", abc: "abc" };
+  const keysEl = document.getElementById("keys");
+  let layer = "abc", shift = false;
+
+  function render() {
+    keysEl.textContent = "";
+    for (const row of layers[layer]) {
+      const r = document.createElement("div");
+      r.className = "row";
+      for (const k of row) {
+        const b = document.createElement("button");
+        b.className = "k";
+        b.type = "button";
+        if (k === "space") b.classList.add("wide4");
+        if (["shift", "bksp", "sym", "abc", "enter"].includes(k)) b.classList.add("mod");
+        if (k === "enter" || k === "bksp") b.classList.add("wide2");
+        if (k === "shift" && shift) b.classList.add("on");
+        let text = labels[k] || (shift && layer === "abc" ? k.toUpperCase() : k);
+        b.textContent = text;
+        b.dataset.k = k;
+        r.appendChild(b);
+      }
+      keysEl.appendChild(r);
+    }
+  }
+
+  function pressSoft(k) {
+    if (k === "shift") { shift = !shift; render(); return false; }
+    if (k === "sym") { layer = "sym"; render(); return false; }
+    if (k === "abc") { layer = "abc"; render(); return false; }
+    if (k === "space") send(32);
+    else if (k === "bksp") send(KEY.bksp);
+    else if (k === "enter") send(KEY.enter);
+    else {
+      send((shift && layer === "abc" ? k.toUpperCase() : k).codePointAt(0));
+      if (shift) { shift = false; render(); }
+    }
+    return true;
+  }
+
+  // Press-and-hold repeats, like a held key on the device.
+  let holdTimer = null, repeatTimer = null;
+  function stopHold() { clearTimeout(holdTimer); clearInterval(repeatTimer); holdTimer = repeatTimer = null;
+    document.querySelectorAll("button.k.down").forEach((b) => b.classList.remove("down")); }
+  document.getElementById("device").addEventListener("pointerdown", (e) => {
+    const b = e.target.closest("button.k");
+    if (!b) return;
+    e.preventDefault();
+    b.classList.add("down");
+    let fire;
+    if (b.dataset.key) { const c = +b.dataset.key; fire = () => send(c); fire(); }
+    else if (pressSoft(b.dataset.k)) { const k = b.dataset.k; fire = () => pressSoft(k); }
+    if (fire) holdTimer = setTimeout(() => { repeatTimer = setInterval(fire, 80); }, 420);
+  });
+  ["pointerup", "pointercancel", "pointerleave"].forEach((t) => document.addEventListener(t, stopHold));
+  // Keyboard users: Enter/Space on a focused on-screen key.
+  document.getElementById("device").addEventListener("click", (e) => {
+    const b = e.target.closest("button.k");
+    if (!b || e.detail !== 0) return;  // detail 0 = keyboard-activated
+    if (b.dataset.key) send(+b.dataset.key); else pressSoft(b.dataset.k);
+  });
+
+  // Jump-to-app chips, in launcher order.
+  const apps = ["Files", "Notes", "Wi-Fi", "IR Remote", "Compass", "Battery", "Clock", "System", "Settings"];
+  const appsEl = document.getElementById("apps");
+  const homeBtn = document.createElement("button");
+  homeBtn.type = "button"; homeBtn.textContent = "Home";
+  homeBtn.addEventListener("click", () => { if (mod) mod._zs_web_open(-1); canvas.focus({ preventScroll: true }); });
+  appsEl.appendChild(homeBtn);
+  apps.forEach((name, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = name;
+    b.addEventListener("click", () => { if (mod) mod._zs_web_open(i); canvas.focus({ preventScroll: true }); });
+    appsEl.appendChild(b);
+  });
+
+  render();
+  requestAnimationFrame(frame);
+  createZeroShell({ arguments: [] }).then((m) => {
+    mod = m;
+    document.getElementById("device").classList.add("ready");
+    status.textContent = "keyboard: on";
+  }).catch((err) => {
+    status.textContent = "failed to start";
+    console.error(err);
+  });
+})();
+</script>

@@ -1,5 +1,5 @@
 // Notes: a plain-text editor. Saves to ~/notes.txt (or the file opened from
-// Files) automatically when you leave, and on Ctrl+S / Fn+S.
+// Files) automatically when you leave.
 #include <fstream>
 #include <sstream>
 
@@ -50,15 +50,6 @@ public:
         shell_add_focus(ta_);
         lv_group_focus_obj(ta_);
         update_status();
-    }
-
-    bool on_key(uint32_t key) override {
-        if (key == 19) {  // Ctrl+S
-            save();
-            shell_toast("Saved");
-            return true;
-        }
-        return false;
     }
 
 private:

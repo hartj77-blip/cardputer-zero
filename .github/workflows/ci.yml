@@ -25,6 +25,21 @@ jobs:
           name: screenshots
           path: build/screenshots
 
+  web:
+    name: Browser simulator (WebAssembly)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.74
+      - name: Build
+        run: web/build.sh build/zeroos-simulator.html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zeroos-simulator-html
+          path: build/zeroos-simulator.html
+
   device:
     name: Device build (arm64)
     runs-on: ubuntu-24.04

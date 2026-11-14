@@ -5,8 +5,9 @@ project(zeroshell VERSION 0.1.0 LANGUAGES C CXX)
 #   sim      SDL2 window on a desktop PC (development)
 #   device   Linux framebuffer + evdev keyboard (Cardputer Zero)
 #   headless no window; renders screens to image files (CI screenshots, tests)
-set(ZS_BACKEND "sim" CACHE STRING "sim | device | headless")
-set_property(CACHE ZS_BACKEND PROPERTY STRINGS sim device headless)
+#   web      WebAssembly for a browser demo (build with emcmake; see web/)
+set(ZS_BACKEND "sim" CACHE STRING "sim | device | headless | web")
+set_property(CACHE ZS_BACKEND PROPERTY STRINGS sim device headless web)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -52,5 +53,17 @@ target_compile_definitions(zeroshell PRIVATE
   ZS_BACKEND_NAME="${ZS_BACKEND}")
 target_compile_options(zeroshell PRIVATE -Wall -Wextra -Wno-unused-parameter)
 target_link_libraries(zeroshell PRIVATE lvgl pthread m)
+
+if(ZS_BACKEND STREQUAL "web")
+  if(NOT EMSCRIPTEN)
+    message(FATAL_ERROR "ZS_BACKEND=web needs Emscripten: emcmake cmake ...")
+  endif()
+  set_target_properties(zeroshell PROPERTIES SUFFIX ".js")
+  target_link_options(zeroshell PRIVATE
+    -sMODULARIZE=1 -sEXPORT_NAME=createZeroShell -sENVIRONMENT=web
+    -sSINGLE_FILE=1 -sALLOW_MEMORY_GROWTH=1 -sEXIT_RUNTIME=0
+    -sEXPORTED_FUNCTIONS=_main,_zs_web_key,_zs_web_open,_zs_web_frame,_zs_web_take_dirty
+    -sEXPORTED_RUNTIME_METHODS=HEAPU8)
+endif()
 
 install(TARGETS zeroshell RUNTIME DESTINATION bin)

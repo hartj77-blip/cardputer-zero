@@ -139,6 +139,7 @@ public:
         s.model = accel_.empty() ? "CardputerZero Lite" : "CardputerZero";
         s.os_version = "ZeroOS " ZS_VERSION;
         s.cpu_temp_c = int(read_long("/sys/class/thermal/thermal_zone0/temp") / 1000);
+#ifndef __EMSCRIPTEN__  // the web demo always uses MockHal
         struct sysinfo si{};
         if (sysinfo(&si) == 0) {
             s.uptime_s = si.uptime;
@@ -146,6 +147,7 @@ public:
             s.mem_used_mb = int((si.totalram - si.freeram - si.bufferram) * si.mem_unit / (1024 * 1024));
             s.cpu_load_percent = int(si.loads[0] / 65536.0 / 4 * 100);
         }
+#endif
         struct statvfs vfs{};
         if (statvfs("/", &vfs) == 0) {
             double total = double(vfs.f_blocks) * vfs.f_frsize;
