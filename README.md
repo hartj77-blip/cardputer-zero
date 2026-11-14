@@ -20,7 +20,8 @@ radios, audio, camera, real-time clock, key LEDs and the expansion ports.
 | `image/` image builder on M5's open pi-gen, pinned kernel and drivers | Built in CI on every image change |
 | `.github/workflows/` CI: simulator, screenshots, arm64 build, browser build, full SD image | Ready |
 
-Apps: **Files**, **Notes**, **Media** (music player + voice notes), **Wi-Fi**, **IR Remote** (send + learn), **Compass** (with spirit level),
+Apps: **Terminal** (a real console on the built-in screen, with tmux), **Remote** (Tailscale sign-in by QR
+code, your devices, one-key SSH, remote desktop on a monitor, Taildrop), **Files**, **Notes**, **Media** (music player + voice notes), **Wi-Fi**, **IR Remote** (send + learn), **Compass** (with spirit level),
 **Battery** (time left, power draw, power profile), **Clock** (with stopwatch), **Dock** (desktop with web
 browser, video, terminal and files on an HDMI monitor), **System** monitor (CPU and
 where the memory goes), **Settings** (Wi-Fi, Bluetooth, brightness, volume, mute, power profile, screen dimming
@@ -72,6 +73,7 @@ first, copy `build/device/zeroshell` over, stop the stock launcher
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the layers fit together
 - [docs/HARDWARE.md](docs/HARDWARE.md): every chip, how Linux exposes it, known issues and our fixes
 - [docs/ROADMAP.md](docs/ROADMAP.md): phases and what's next
+- [docs/REMOTE.md](docs/REMOTE.md): Remote mode, Tailscale, Terminal and Taildrop
 - [docs/DOCK.md](docs/DOCK.md): Dock mode, the desktop on an HDMI monitor
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md): memory and battery tuning, measurements, and `zeroos-measure`
 

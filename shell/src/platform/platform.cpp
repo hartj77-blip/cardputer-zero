@@ -9,6 +9,7 @@
 #include <unistd.h>
 #if ZS_BACKEND_DEVICE
 #include <linux/input.h>
+#include <linux/kd.h>
 #endif
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -81,7 +82,18 @@ std::string find_keyboard() {
 }
 }  // namespace
 
+// zeroshell.service gives us tty1 as stdin. Graphics mode stops the console
+// drawing over us (cursor, messages); keyboard off stops keys piling up in
+// tty1 (or reaching a login prompt). Restored on exit.
+void tty_graphics(bool on) {
+    if (!isatty(0)) return;
+    ioctl(0, KDSETMODE, on ? KD_GRAPHICS : KD_TEXT);
+    ioctl(0, KDSKBMODE, on ? K_OFF : K_UNICODE);
+}
+
 lv_indev_t* platform_init(int, int, int) {
+    tty_graphics(true);
+    std::atexit([] { tty_graphics(false); });
     lv_display_t* d = lv_linux_fbdev_create();
     const char* fb = std::getenv("ZS_FRAMEBUFFER");
     lv_linux_fbdev_set_file(d, fb ? fb : "/dev/fb0");  // fb0 = LCD, fb1 = HDMI

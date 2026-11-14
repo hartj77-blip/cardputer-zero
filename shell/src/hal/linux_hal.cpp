@@ -535,6 +535,99 @@ private:
         return true;
     }
 
+    // --- Tailscale. Every call forks the tailscale CLI, so cache for 3 s.
+    TsStatus tailscale() override {
+        time_t now = time(nullptr);
+        if (now - ts_at_ < 3 && ts_at_) return ts_cache_;
+        ts_at_ = now;
+        TsStatus t;
+        t.installed = access("/usr/bin/tailscale", X_OK) == 0;
+        if (!t.installed) return ts_cache_ = t;
+        t.running = run("systemctl is-active tailscaled.service").rfind("active", 0) == 0;
+        if (!t.running) {
+            t.state = "Stopped";
+            return ts_cache_ = t;
+        }
+        std::string js = run("tailscale status --json --peers=false 2>/dev/null");
+        t.state = json_str(js, "BackendState");
+        t.auth_url = json_str(js, "AuthURL");
+        t.tailnet = json_str(js, "MagicDNSSuffix");
+        if (t.state.empty()) t.state = "Starting";
+        if (t.state == "Running") {
+            // "100.x.y.z  name  user@  os  -|offline|active; direct ..." (first line is us)
+            std::istringstream in(run("tailscale status 2>/dev/null"));
+            bool first = true;
+            for (std::string line; std::getline(in, line);) {
+                std::istringstream f(line);
+                std::string ip, name, user, os;
+                if (!(f >> ip >> name >> user >> os) || ip.empty() || ip[0] == '#') continue;
+                std::string rest;
+                std::getline(f, rest);
+                if (first) {
+                    t.self_ip = ip;
+                    t.self_name = name;
+                    first = false;
+                    continue;
+                }
+                t.peers.push_back({name, ip, os, rest.find("offline") == std::string::npos});
+            }
+            std::stable_sort(t.peers.begin(), t.peers.end(),
+                             [](const TsPeer& a, const TsPeer& b) { return a.online > b.online; });
+        }
+        return ts_cache_ = t;
+    }
+    void tailscale_start() override {
+        // tailscaled's ZeroOS drop-in makes pi the operator, so "up" needs no
+        // root. It waits for sign-in; the link shows up in status (AuthURL).
+        run("systemctl start tailscaled.service");
+        run("mkdir -p \"$HOME/.cache/zeroos\"; setsid tailscale up --timeout=10m "
+            ">\"$HOME/.cache/zeroos/tailscale-up.log\" 2>&1 </dev/null &");
+        ts_at_ = 0;
+    }
+    void tailscale_stop() override {
+        run("tailscale down; systemctl stop tailscaled.service");
+        ts_at_ = 0;
+    }
+    void tailscale_logout() override {
+        run("tailscale logout");
+        ts_at_ = 0;
+    }
+    bool taildrop_send(const std::string& path, const std::string& peer) override {
+        std::ostringstream cmd;
+        cmd << "tailscale file cp " << std::quoted(path) << ' ' << std::quoted(peer + ":") << " && echo ok";
+        return run(cmd.str()).find("ok") != std::string::npos;
+    }
+
+    // --- Terminal: zeroos-terminal.service runs tmux on tty3 and switches to it.
+    bool terminal_open(const std::string& command) override {
+        std::string dir = std::string(std::getenv("HOME") ? std::getenv("HOME") : "/home/pi") + "/.cache/zeroos";
+        run("mkdir -p '" + dir + "'");
+        write_str(dir + "/terminal-cmd", command);
+        run("systemctl start zeroos-terminal.service");
+        term_at_ = 0;
+        return true;
+    }
+    bool terminal_active() override {
+        time_t now = time(nullptr);
+        if (now != term_at_) {
+            term_at_ = now;
+            std::string st = run("systemctl is-active zeroos-terminal.service");
+            term_cache_ = st.rfind("active", 0) == 0 || st.rfind("activating", 0) == 0;
+        }
+        return term_cache_;
+    }
+
+    static std::string json_str(const std::string& js, const std::string& key) {
+        // Enough for tailscale's flat top-level string fields: "Key": "value"
+        auto k = js.find("\"" + key + "\"");
+        if (k == std::string::npos) return "";
+        auto q1 = js.find('"', js.find(':', k) + 1);
+        if (q1 == std::string::npos) return "";
+        auto q2 = js.find('"', q1 + 1);
+        if (q2 == std::string::npos || js.find('\n', k) < q1) return "";
+        return js.substr(q1 + 1, q2 - q1 - 1);
+    }
+
     // The highest listed frequency at or below target (or the lowest one).
     static long pick_freq(const std::string& policy, long target) {
         std::istringstream in(read_str(policy + "scaling_available_frequencies"));
@@ -618,10 +711,18 @@ private:
         }
         n.ethernet = read_str("/sys/class/net/eth0/operstate") == "up";
         n.usb_gadget = read_str("/sys/class/net/usb0/operstate") == "up";
+        if (access("/sys/class/net/tailscale0", F_OK) == 0) {
+            std::string a = run("ip -4 -o addr show dev tailscale0 2>/dev/null");   // "... inet 100.x.y.z/32 ..."
+            auto i = a.find("inet ");
+            if (i != std::string::npos) n.tailscale_ip = a.substr(i + 5, a.find('/', i) - i - 5);
+        }
         return n;
     }
 
     bool dock_cache_ = false;
+    TsStatus ts_cache_;
+    time_t ts_at_ = 0, term_at_ = 0;
+    bool term_cache_ = false;
     long dock_calls_ = 0;
     std::string bat_, accel_, magn_, backlight_;
     BatteryInfo bat_cache_;

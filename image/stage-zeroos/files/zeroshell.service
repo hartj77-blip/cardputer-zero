@@ -9,6 +9,12 @@ Group=pi
 SupplementaryGroups=video input audio netdev i2c gpio
 Environment=HOME=/home/pi
 Environment=XDG_RUNTIME_DIR=/run/user/1000
+# tty1 is ours: ZeroShell puts it in graphics mode with the keyboard off, so
+# the console never draws over the UI and keys never pile up in it.
+TTYPath=/dev/tty1
+StandardInput=tty-force
+StandardOutput=journal
+StandardError=journal
 # fb0 = LCD, fb1 = HDMI
 Environment=ZS_FRAMEBUFFER=/dev/fb0
 # "+" runs as root: open up the CPU speed and screen power files to video.

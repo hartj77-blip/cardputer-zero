@@ -4,6 +4,7 @@
 
 #include "apps/common.h"
 #include "ui/power.h"
+#include "ui/remote.h"
 
 namespace zs {
 namespace {
@@ -58,6 +59,15 @@ public:
         switch_row(col, LV_SYMBOL_BATTERY_2 "  Time left in top bar", p.show_time_left(), [](lv_event_t* e) {
             power().set_show_time_left(lv_obj_has_state(lv_event_get_target_obj(e), LV_STATE_CHECKED));
         });
+
+        // Remote
+        int ts = tailscale_mode() == "always" ? 1 : tailscale_mode() == "off" ? 2 : 0;
+        cycle_row(col, LV_SYMBOL_SHUFFLE "  Tailscale", {{"When needed", 0}, {"Always on", 1}, {"Off", 2}}, ts,
+                  [](int v) {
+                      set_tailscale_mode(v == 1 ? "always" : v == 2 ? "off" : "needed");
+                      if (v == 1) hal().tailscale_start();
+                      if (v == 2) hal().tailscale_stop();
+                  });
 
         button_row(col, LV_SYMBOL_WIFI "  Wi-Fi networks", [](lv_event_t*) { shell_open_app("wifi"); });
         button_row(col, LV_SYMBOL_LIST "  About this device", [](lv_event_t*) { shell_open_app("sysmon"); });

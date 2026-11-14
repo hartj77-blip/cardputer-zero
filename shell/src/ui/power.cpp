@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include "platform/platform.h"
 #include "ui/app.h"
 #include "ui/prefs.h"
 
@@ -87,7 +86,6 @@ void Power::set_state(State s, uint32_t now_ms) {
     case State::On:
         if (old == State::Off) {
             hal().set_screen_on(true);
-            platform_set_low_power(false);
             if (wifi_slept_) {
                 hal().set_wifi_enabled(true);
                 wifi_slept_ = false;
@@ -101,7 +99,6 @@ void Power::set_state(State s, uint32_t now_ms) {
     case State::Off:
         off_since_ = now_ms;
         hal().set_screen_on(false);
-        platform_set_low_power(true);
         break;
     }
     apply_cpu();
@@ -113,7 +110,7 @@ bool Power::on_key(uint32_t now_ms) {
     last_input_ = now_ms;
     bool was_off = state_ == State::Off;
     set_state(State::On, now_ms);
-    return was_off;   // the key that wakes the screen does nothing else
+    return was_off || handoff_;   // the key that wakes the screen does nothing else
 }
 
 void Power::update_estimate(const BatteryInfo& b, uint32_t now_ms) {

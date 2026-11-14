@@ -14,9 +14,13 @@ std::unique_ptr<App> make_battery_app();
 std::unique_ptr<App> make_clock_app();
 std::unique_ptr<App> make_sysmon_app();
 std::unique_ptr<App> make_dock_app();
+std::unique_ptr<App> make_terminal_app();
+std::unique_ptr<App> make_remote_app();
 
 const std::vector<AppInfo>& app_registry() {
     static const std::vector<AppInfo> apps = {
+        {"terminal", "Terminal", LV_SYMBOL_KEYBOARD, 0x3fb950, make_terminal_app},
+        {"remote", "Remote", LV_SYMBOL_SHUFFLE, 0x39c5cf, make_remote_app},
         {"files", "Files", LV_SYMBOL_DIRECTORY, 0x58a6ff, make_files_app},
         {"notes", "Notes", LV_SYMBOL_EDIT, 0xe3b341, make_notes_app},
         {"media", "Media", LV_SYMBOL_AUDIO, 0xff7eb6, make_media_app},

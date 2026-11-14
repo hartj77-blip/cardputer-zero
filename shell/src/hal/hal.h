@@ -61,6 +61,24 @@ struct NetStatus {
     int bt_connected = 0;
     bool ethernet = false;
     bool usb_gadget = false;
+    std::string tailscale_ip;   // set while Tailscale is connected
+};
+
+// Tailscale (see docs/REMOTE.md).
+struct TsPeer {
+    std::string name;    // machine name, e.g. "desktop"
+    std::string ip;      // 100.x.y.z
+    std::string os;      // linux, windows, macOS, iOS, android...
+    bool online = false;
+};
+
+struct TsStatus {
+    bool installed = false;
+    bool running = false;        // tailscaled is up
+    std::string state;           // Stopped, NeedsLogin, Starting, Running, NeedsMachineAuth
+    std::string auth_url;        // sign-in link while state == NeedsLogin
+    std::string self_name, self_ip, tailnet;
+    std::vector<TsPeer> peers;   // online first
 };
 
 struct IrCode {
@@ -160,6 +178,21 @@ public:
     // Open something on the monitor: "terminal", "browser", "files", or
     // "video" with a file path. False if Dock mode isn't running.
     virtual bool dock_open(const std::string& what, const std::string& path = "") = 0;
+
+    // Tailscale. start() starts the daemon and connects (asking for sign-in
+    // the first time); stop() disconnects and stops the daemon.
+    virtual TsStatus tailscale() = 0;
+    virtual void tailscale_start() = 0;
+    virtual void tailscale_stop() = 0;
+    virtual void tailscale_logout() = 0;
+    virtual bool taildrop_send(const std::string& path, const std::string& peer) = 0;
+
+    // Terminal on the built-in screen: hands the screen and keyboard to a
+    // Linux console running tmux (sessions survive going back). command ""
+    // opens a shell; otherwise it runs in a new tmux window. False if this
+    // backend has no real terminal (the simulator).
+    virtual bool terminal_open(const std::string& command) = 0;
+    virtual bool terminal_active() = 0;
     virtual int volume() = 0;                // 0..100
     virtual void set_volume(int pct) = 0;
     virtual bool muted() = 0;

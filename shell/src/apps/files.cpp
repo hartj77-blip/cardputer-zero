@@ -1,5 +1,7 @@
 // Files: browse the filesystem, starting in the home folder.
-// Enter opens a folder (or a text file in Notes); Backspace goes up.
+// Enter opens a folder (or a text file in Notes, music in the player, video
+// on the monitor in Dock mode); Backspace goes up; S sends a file to one of
+// your devices with Taildrop.
 #include <dirent.h>
 #include <sys/stat.h>
 
@@ -8,6 +10,7 @@
 #include <cctype>
 
 #include "apps/common.h"
+#include "ui/remote.h"
 
 namespace zs {
 
@@ -40,6 +43,14 @@ public:
     bool on_key(uint32_t key) override {
         if (key == LV_KEY_BACKSPACE || key == 8) {
             up();
+            return true;
+        }
+        if (key == 's' || key == 'S') {   // send the focused file with Taildrop
+            lv_obj_t* f = group ? lv_group_get_focused(group) : nullptr;
+            int i = f ? int((intptr_t)lv_obj_get_user_data(f)) : -1;
+            if (i < 0 || i >= int(entries_.size()) || entries_[size_t(i)].dir) return false;
+            remote_set_send(cwd_ + (cwd_ == "/" ? "" : "/") + entries_[size_t(i)].name);
+            shell_open_app("remote");
             return true;
         }
         return false;

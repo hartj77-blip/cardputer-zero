@@ -27,6 +27,12 @@ public:
     // Power manager: redraw the dim/blank overlay and pace the UI timer.
     void screen_changed();
 
+    // Hand the screen to the Linux console terminal (see Hal::terminal_open)
+    // and take it back when the terminal closes.
+    bool open_terminal(const std::string& command);
+    bool in_terminal() const { return handoff_; }
+    const std::string& current_app() const { return app_id_; }
+
 private:
     void apply_pending();
     void build_statusbar();
@@ -42,6 +48,8 @@ private:
     lv_obj_t* toast_ = nullptr;
     lv_obj_t* blank_ = nullptr;     // simulator only: stands in for the backlight
     lv_timer_t* tick_timer_ = nullptr;
+    bool handoff_ = false;
+    uint32_t handoff_since_ = 0;
     uint32_t toast_until_ = 0;
     lv_indev_t* keypad_ = nullptr;
     std::unique_ptr<App> app_;

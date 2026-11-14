@@ -35,6 +35,10 @@ public:
     void set_docked(bool docked, uint32_t now_ms);
     bool docked() const { return docked_; }
 
+    // Terminal on the built-in screen: keys belong to the console but still
+    // count as activity (and wake the screen); ZeroShell doesn't act on them.
+    void set_handoff(bool on) { handoff_ = on; }
+
     bool screen_off() const { return state_ == State::Off; }
     bool dimmed() const { return state_ == State::Dim; }
 
@@ -80,7 +84,8 @@ private:
     int dim_after_s_ = 30, off_after_s_ = 60, bt_auto_off_min_ = 10;
     bool wifi_sleep_ = false, show_time_left_ = true;
     bool wifi_slept_ = false;
-    bool docked_ = false;    // we turned Wi-Fi off; turn it back on at wake
+    bool docked_ = false;
+    bool handoff_ = false;    // we turned Wi-Fi off; turn it back on at wake
     uint32_t last_input_ = 0, off_since_ = 0, bt_idle_since_ = 0, last_sample_ = 0;
     double avg_mw_ = 0;
     uint32_t avg_ms_ = 0;        // how long the average has been running

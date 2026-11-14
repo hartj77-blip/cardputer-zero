@@ -63,7 +63,7 @@ show time-left estimates in the status bar.
 1. **Lean base and memory tuning, with real measurements.** *(done in software; measuring waits for the unit)* Includes device bring-up: display, keyboard, battery, Wi-Fi, audio, RTC, IMU and IR working on the unit.
 2. **Battery life.** Governor, dimming, radio management, time-left estimates. *(done in software; see [PERFORMANCE.md](PERFORMANCE.md#battery))*
 3. **Dock mode.** HDMI desktop, video, web browsing. *(done in software; see [DOCK.md](DOCK.md))*
-4. **Extras.** Tailscale and Remote mode polish, sync, motion gestures, expansion modules.
+4. **Extras.** Tailscale and Remote mode *(done in software; see [REMOTE.md](REMOTE.md))*, then sync, motion gestures, expansion modules.
 
 ## Done so far (Phase 0)
 

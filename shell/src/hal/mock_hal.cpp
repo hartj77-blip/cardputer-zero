@@ -60,6 +60,7 @@ public:
         n.ip = wifi_on_ ? "192.168.1.42" : "";
         n.bt_enabled = bt_on_;
         n.bt_connected = bt_on_ && bt_paired_ ? 1 : 0;
+        if (ts_on_ && ts_signed_in_) n.tailscale_ip = "100.101.42.7";
         return n;
     }
 
@@ -129,6 +130,44 @@ public:
         d.dock_running = dock_;
         return d;
     }
+    // Tailscale, simulated: sign-in "completes" 8 s after the QR code shows.
+    TsStatus tailscale() override {
+        TsStatus t;
+        t.installed = true;
+        t.running = ts_on_;
+        if (!ts_on_) {
+            t.state = "Stopped";
+            return t;
+        }
+        if (!ts_signed_in_ && ts_clock_.ms() > 8000) ts_signed_in_ = true;
+        if (!ts_signed_in_) {
+            t.state = "NeedsLogin";
+            t.auth_url = "https://login.tailscale.com/a/5f1c2e9a7b3d";
+            return t;
+        }
+        t.state = "Running";
+        t.self_name = "cardputer";
+        t.self_ip = "100.101.42.7";
+        t.tailnet = "tail4c2e.ts.net";
+        t.peers = {{"desktop", "100.88.12.4", "windows", true},
+                   {"homelab", "100.71.3.20", "linux", true},
+                   {"phone", "100.90.7.33", "iOS", true},
+                   {"macbook", "100.64.9.12", "macOS", false}};
+        return t;
+    }
+    void tailscale_start() override {
+        ts_on_ = true;
+        ts_clock_.start();
+    }
+    void tailscale_stop() override { ts_on_ = false; }
+    void tailscale_logout() override { ts_signed_in_ = false; ts_clock_.start(); }
+    bool taildrop_send(const std::string& path, const std::string& peer) override {
+        std::printf("[mock-taildrop] %s -> %s\n", path.c_str(), peer.c_str());
+        return ts_on_ && ts_signed_in_;
+    }
+    bool terminal_open(const std::string&) override { return false; }   // no real console here
+    bool terminal_active() override { return false; }
+
     void dock_start() override { dock_ = g_hdmi; }
     void dock_stop() override { dock_ = false; }
     bool dock_open(const std::string& what, const std::string& path) override {
@@ -247,6 +286,8 @@ private:
     bool muted_ = false;
     bool screen_on_ = true;
     bool dock_ = false;
+    bool ts_on_ = false, ts_signed_in_ = false;
+    PlayClock ts_clock_;
     CpuMode cpu_ = CpuMode::Balanced;
 };
 

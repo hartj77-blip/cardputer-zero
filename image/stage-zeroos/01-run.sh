@@ -26,6 +26,16 @@ install -m 0755 files/dock/dock-session      "${ROOTFS_DIR}/usr/lib/zeroos/dock-
 install -m 0755 files/dock/zeroos-dock files/dock/zeroos-browser files/dock/zeroos-video "${ROOTFS_DIR}/usr/bin/"
 install -m 0644 files/dock/zeroos-dock.service "${ROOTFS_DIR}/etc/systemd/system/"
 install -d -o 1000 -g 1000 "${ROOTFS_DIR}/home/${FIRST_USER_NAME}/Videos" 2>/dev/null || true
+# Remote mode: Terminal app (tmux on tty3), Tailscale helpers (docs/REMOTE.md).
+install -m 0644 files/remote/zeroos-terminal.service files/remote/zeroos-taildrop.service \
+                                             "${ROOTFS_DIR}/etc/systemd/system/"
+install -m 0755 files/remote/terminal-session "${ROOTFS_DIR}/usr/lib/zeroos/terminal-session"
+install -m 0644 files/remote/tmux.conf       "${ROOTFS_DIR}/etc/zeroos/tmux.conf"
+install -D -m 0644 files/remote/tailscaled-zeroos.conf \
+                   "${ROOTFS_DIR}/etc/systemd/system/tailscaled.service.d/zeroos.conf"
+# Console font for the Terminal app: Terminus 6x12 gives 53 x 14 on 320 x 170.
+sed -i -e 's/^FONTFACE=.*/FONTFACE="Terminus"/' -e 's/^FONTSIZE=.*/FONTSIZE="6x12"/' \
+    "${ROOTFS_DIR}/etc/default/console-setup" 2>/dev/null || true
 install -D -m 0644 files/nm-wifi-powersave.conf "${ROOTFS_DIR}/etc/NetworkManager/conf.d/90-zeroos-powersave.conf"
 cat files/initramfs-modules >>               "${ROOTFS_DIR}/etc/initramfs-tools/modules"
 install -m 0755 files/initramfs-hook         "${ROOTFS_DIR}/etc/initramfs-tools/hooks/zeroos-panel"
@@ -56,6 +66,17 @@ UNIT
 
 on_chroot << 'CHROOT'
 set -e
+# Tailscale from its own repository (not in Debian). Installed but off at
+# boot: ZeroShell starts it when needed (Settings > Tailscale).
+curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg \
+    -o /usr/share/keyrings/tailscale-archive-keyring.gpg
+curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.tailscale-keyring.list \
+    -o /etc/apt/sources.list.d/tailscale.list
+apt-get update
+apt-get install -y tailscale
+sed -i 's/^FLAGS=.*/FLAGS="--no-logs-no-support"/' /etc/default/tailscaled
+systemctl disable tailscaled.service
+systemctl enable zeroos-taildrop.service
 # arm64 only: M5 enables armhf too, which doubles apt indexes (owner report).
 dpkg --remove-architecture armhf 2>/dev/null || true
 # nexmon shadows the onboard Wi-Fi driver and has no BCM43439 support.

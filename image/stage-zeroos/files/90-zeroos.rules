@@ -9,8 +9,10 @@ polkit.addRule(function(action, subject) {
         return polkit.Result.YES;
     }
     // Dock mode: ZeroShell starts and stops the desktop on the HDMI monitor.
+    // Terminal app and Tailscale ("when needed") are started the same way.
+    var units = ["zeroos-dock.service", "zeroos-terminal.service", "tailscaled.service"];
     if (action.id == "org.freedesktop.systemd1.manage-units" &&
-        action.lookup("unit") == "zeroos-dock.service") {
+        units.indexOf(action.lookup("unit")) >= 0) {
         return polkit.Result.YES;
     }
 });

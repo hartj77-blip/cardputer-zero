@@ -43,5 +43,8 @@ void shell_open_app(const std::string& id);
 void shell_go_home();
 void shell_add_focus(lv_obj_t* obj);   // add widget to the current app's focus group
 void shell_screen_changed();            // power manager: screen dimmed, off or on
+// Open the terminal on the built-in screen ("" = shell, or a command such as
+// "ssh desktop"). False in the simulator, which has no real console.
+bool shell_open_terminal(const std::string& command);
 
 }  // namespace zs

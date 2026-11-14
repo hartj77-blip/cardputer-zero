@@ -25,3 +25,7 @@ wlr-randr
 chromium
 mpv
 mc
+curl
+tmux
+mosh
+freerdp3-wayland

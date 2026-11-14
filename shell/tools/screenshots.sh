@@ -15,7 +15,7 @@ head -c 48213 /dev/zero > "$DEMO/Pictures/garden.jpg"
 echo "# my project" > "$DEMO/Projects/README.md"
 
 STEPS="shot:01-home.ppm"
-STEPS+=",right,right,right,right,shot:02-home-navigate.ppm"
+STEPS+=",right,right,right,right,right,right,right,shot:02-home-navigate.ppm"
 STEPS+=",enter,wait:300,shot:03-compass.ppm"
 STEPS+=",open:battery,shot:04-battery.ppm"
 STEPS+=",open:wifi,shot:05-wifi.ppm"
@@ -35,6 +35,9 @@ STEPS+=",home,wait:31000,shot:18-screen-dimmed.ppm"
 STEPS+=",right,open:dock,wait:600,shot:19-dock-no-monitor.ppm"
 STEPS+=",hdmi:1,wait:1500,shot:20-dock-monitor.ppm"
 STEPS+=",enter,wait:1500,shot:21-docked.ppm,hdmi:0,wait:4500"
+STEPS+=",open:remote,wait:1500,shot:22-remote-signin.ppm"
+STEPS+=",wait:9000,right,shot:23-remote-devices.ppm"
+STEPS+=",open:terminal,wait:300,shot:24-terminal.ppm"
 
 (cd "$OUT" && HOME="$DEMO" TZ=UTC "$BIN" --script "$STEPS")
 python3 "$HERE/ppm2png.py" "$OUT"

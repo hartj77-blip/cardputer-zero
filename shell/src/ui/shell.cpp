@@ -3,7 +3,9 @@
 #include <ctime>
 
 #include "hal/hal.h"
+#include "platform/platform.h"
 #include "ui/power.h"
+#include "ui/remote.h"
 #include "ui/theme.h"
 
 namespace zs {
@@ -148,6 +150,7 @@ void Shell::update_statusbar() {
     if (h.record_state().recording) icons += LV_SYMBOL_STOP " REC  ";
     else if (h.playback().playing) icons += LV_SYMBOL_AUDIO "  ";
     if (n.usb_gadget) icons += LV_SYMBOL_USB "  ";
+    if (!n.tailscale_ip.empty()) icons += "TS  ";
     if (n.bt_enabled) icons += LV_SYMBOL_BLUETOOTH "  ";
     if (n.wifi_connected) icons += LV_SYMBOL_WIFI "  ";
     if (b.charging) icons += LV_SYMBOL_CHARGE " ";
@@ -162,6 +165,12 @@ void Shell::update_statusbar() {
         icons += buf;
     }
     lv_label_set_text(sb_icons_, icons.c_str());
+    // Too many icons: hide the app title rather than draw over it.
+    lv_obj_update_layout(sb_icons_);
+    lv_obj_update_layout(sb_title_);
+    bool clash = lv_obj_get_x(sb_title_) + lv_obj_get_width(sb_title_) + 6 > lv_obj_get_x(sb_icons_);
+    if (clash) lv_obj_add_flag(sb_title_, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_remove_flag(sb_title_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_style_text_color(sb_icons_, c(b.percent >= 0 && b.percent < 15 && !b.charging ? kBad : kText), 0);
 }
 
@@ -169,9 +178,16 @@ void Shell::tick_cb(lv_timer_t* t) {
     auto* s = static_cast<Shell*>(lv_timer_get_user_data(t));
     hal().poll();
     power().tick(lv_tick_get());
+    remote_tick(lv_tick_get());
     static int n = 0;
-    // Screen off: the timer runs every 500 ms and nothing is drawn.
-    if (!power().screen_off() && ++n % 10 == 0) s->update_statusbar();
+    // Terminal closed (exit, or tmux detach with Alt+`): take the screen back.
+    if (s->handoff_ && lv_tick_elaps(s->handoff_since_) > 1500 && !hal().terminal_active()) {
+        s->handoff_ = false;
+        power().set_handoff(false);
+        s->screen_changed();
+    }
+    // Screen off or terminal: the timer runs every 500 ms and nothing is drawn.
+    if (!power().screen_off() && !s->handoff_ && ++n % 10 == 0) s->update_statusbar();
     if (s->app_) s->app_->tick();
     s->apply_pending();
     if (s->toast_until_ && lv_tick_get() > s->toast_until_) {
@@ -271,10 +287,21 @@ bool Shell::handle_key(uint32_t key) {
     return used;
 }
 
+bool Shell::open_terminal(const std::string& command) {
+    if (!hal().terminal_open(command)) return false;
+    handoff_ = true;
+    handoff_since_ = lv_tick_get();
+    power().set_handoff(true);
+    screen_changed();
+    return true;
+}
+
 void Shell::screen_changed() {
     lv_display_t* disp = lv_display_get_default();
     bool off = power().screen_off();
-    if (!off) {
+    bool idle = off || handoff_;   // nothing of ours on screen
+    platform_set_low_power(idle);
+    if (!idle) {
         lv_display_enable_invalidation(disp, true);
         lv_timer_set_period(tick_timer_, 100);
     }
@@ -287,9 +314,9 @@ void Shell::screen_changed() {
             lv_obj_add_flag(blank_, LV_OBJ_FLAG_HIDDEN);
         }
     }
-    if (off) {
-        // Draw the last frame, then stop drawing until the screen wakes.
-        lv_refr_now(disp);
+    if (idle) {
+        // Draw the last frame (not over the console), then stop drawing.
+        if (!handoff_) lv_refr_now(disp);
         lv_display_enable_invalidation(disp, false);
         lv_timer_set_period(tick_timer_, 500);
     } else {
@@ -304,5 +331,6 @@ void shell_open_app(const std::string& id) { Shell::get().open_app(id); }
 void shell_go_home() { Shell::get().go_home(); }
 void shell_add_focus(lv_obj_t* obj) { Shell::get().add_focus(obj); }
 void shell_screen_changed() { Shell::get().screen_changed(); }
+bool shell_open_terminal(const std::string& command) { return Shell::get().open_terminal(command); }
 
 }  // namespace zs
