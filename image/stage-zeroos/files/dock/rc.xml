@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<!-- labwc config for ZeroOS Dock mode. Keys work on a USB keyboard and on the
+     Cardputer's own keyboard (it has Ctrl and Alt but no Super key). -->
+<labwc_config>
+  <core><gap>4</gap></core>
+  <theme>
+    <name></name>
+    <cornerRadius>6</cornerRadius>
+    <font place="ActiveWindow"><name>sans</name><size>10</size></font>
+  </theme>
+  <focus><followMouse>no</followMouse></focus>
+  <placement><policy>cascade</policy></placement>
+  <keyboard>
+    <default />
+    <!-- Terminal -->
+    <keybind key="W-Return"><action name="Execute" command="foot" /></keybind>
+    <keybind key="C-A-t"><action name="Execute" command="foot" /></keybind>
+    <!-- Web browser -->
+    <keybind key="W-b"><action name="Execute" command="zeroos-browser" /></keybind>
+    <keybind key="C-A-b"><action name="Execute" command="zeroos-browser" /></keybind>
+    <!-- Files -->
+    <keybind key="W-e"><action name="Execute" command="foot -e mc" /></keybind>
+    <keybind key="C-A-f"><action name="Execute" command="foot -e mc" /></keybind>
+    <!-- Videos -->
+    <keybind key="W-v"><action name="Execute" command="zeroos-video" /></keybind>
+    <keybind key="C-A-v"><action name="Execute" command="zeroos-video" /></keybind>
+    <!-- App launcher -->
+    <keybind key="W-space"><action name="Execute" command="fuzzel" /></keybind>
+    <keybind key="A-space"><action name="Execute" command="fuzzel" /></keybind>
+    <!-- Windows -->
+    <keybind key="W-q"><action name="Close" /></keybind>
+    <keybind key="A-F4"><action name="Close" /></keybind>
+    <keybind key="W-f"><action name="ToggleMaximize" /></keybind>
+    <keybind key="W-Up"><action name="ToggleMaximize" /></keybind>
+    <keybind key="W-Left"><action name="SnapToEdge" direction="left" /></keybind>
+    <keybind key="W-Right"><action name="SnapToEdge" direction="right" /></keybind>
+    <!-- Leave Dock mode -->
+    <keybind key="C-A-Delete"><action name="Execute" command="zeroos-dock stop" /></keybind>
+  </keyboard>
+  <windowRules>
+    <!-- Start big: small monitors and a 720p default. -->
+    <windowRule identifier="*" serverDecoration="yes">
+      <action name="Maximize" />
+    </windowRule>
+  </windowRules>
+</labwc_config>

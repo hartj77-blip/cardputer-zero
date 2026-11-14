@@ -1,0 +1,23 @@
+#!/bin/sh
+# Control Dock mode (the desktop on the HDMI monitor).
+#   zeroos-dock start | stop | status
+#   zeroos-dock open terminal | browser | files | video [FILE]
+uid=$(id -u pi 2>/dev/null || echo 1000)
+case "$1" in
+    start)  exec systemctl --no-block start zeroos-dock.service ;;
+    stop)   exec systemctl --no-block stop zeroos-dock.service ;;
+    status) systemctl is-active zeroos-dock.service ;;
+    open)
+        systemctl is-active --quiet zeroos-dock.service || { echo "Dock mode is not running" >&2; exit 1; }
+        export XDG_RUNTIME_DIR="/run/user/$uid" WAYLAND_DISPLAY=wayland-0
+        case "$2" in
+            terminal) cmd="foot" ;;
+            browser)  cmd="zeroos-browser" ;;
+            files)    cmd="foot -e mc" ;;
+            video)    shift 2; setsid zeroos-video "$@" >/dev/null 2>&1 < /dev/null & exit 0 ;;
+            *) echo "usage: zeroos-dock open terminal|browser|files|video [FILE]" >&2; exit 2 ;;
+        esac
+        setsid $cmd >/dev/null 2>&1 < /dev/null &
+        ;;
+    *) sed -n 2,4p "$0"; exit 2 ;;
+esac

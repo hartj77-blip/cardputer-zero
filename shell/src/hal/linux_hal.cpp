@@ -30,6 +30,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <iomanip>
 #include <sstream>
 
 #include "hal/hal.h"
@@ -505,6 +506,35 @@ private:
     PlayClock clock_, rec_clock_;
     std::vector<std::pair<std::string, int>> durations_;
 
+    DisplayStatus display() override {
+        DisplayStatus d;
+        // The vc4 card's HDMI connector, e.g. /sys/class/drm/card1-HDMI-A-1/.
+        for (auto& n : list_dir("/sys/class/drm/")) {
+            if (n.find("-HDMI-A-") == std::string::npos) continue;
+            std::string base = "/sys/class/drm/" + n + "/";
+            if (read_str(base + "status") == "connected") {
+                d.hdmi_connected = true;
+                std::istringstream modes(read_str(base + "modes"));
+                std::getline(modes, d.hdmi_mode);
+                break;
+            }
+        }
+        // systemctl is a fork; ask every ~2 s at most.
+        if (++dock_calls_ % 20 == 1) dock_cache_ = run("systemctl is-active zeroos-dock.service").rfind("active", 0) == 0;
+        d.dock_running = dock_cache_;
+        return d;
+    }
+    void dock_start() override { run("zeroos-dock start"); dock_cache_ = true; dock_calls_ = 0; }
+    void dock_stop() override { run("zeroos-dock stop"); dock_cache_ = false; dock_calls_ = 0; }
+    bool dock_open(const std::string& what, const std::string& path) override {
+        if (!dock_cache_) return false;
+        std::ostringstream cmd;
+        cmd << "zeroos-dock open " << what;
+        if (!path.empty()) cmd << ' ' << std::quoted(path);
+        run(cmd.str());
+        return true;
+    }
+
     // The highest listed frequency at or below target (or the lowest one).
     static long pick_freq(const std::string& policy, long target) {
         std::istringstream in(read_str(policy + "scaling_available_frequencies"));
@@ -591,6 +621,8 @@ private:
         return n;
     }
 
+    bool dock_cache_ = false;
+    long dock_calls_ = 0;
     std::string bat_, accel_, magn_, backlight_;
     BatteryInfo bat_cache_;
     ImuSample imu_cache_;

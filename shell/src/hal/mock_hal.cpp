@@ -9,6 +9,7 @@
 
 namespace zs {
 namespace {
+bool g_hdmi = false;
 
 class MockHal : public Hal {
 public:
@@ -119,6 +120,21 @@ public:
     void set_screen_on(bool on) override { screen_on_ = on; }
     bool has_backlight() override { return false; }
     void set_cpu_mode(CpuMode m) override { cpu_ = m; }
+
+    DisplayStatus display() override {
+        if (!g_hdmi) dock_ = false;   // unplugging ends the pretend desktop
+        DisplayStatus d;
+        d.hdmi_connected = g_hdmi;
+        d.hdmi_mode = g_hdmi ? "1920x1080" : "";
+        d.dock_running = dock_;
+        return d;
+    }
+    void dock_start() override { dock_ = g_hdmi; }
+    void dock_stop() override { dock_ = false; }
+    bool dock_open(const std::string& what, const std::string& path) override {
+        std::printf("[mock-dock] open %s %s\n", what.c_str(), path.c_str());
+        return dock_;
+    }
     int volume() override { return volume_; }
     void set_volume(int p) override { volume_ = p; }
     bool muted() override { return muted_; }
@@ -230,10 +246,13 @@ private:
     int volume_ = 60;
     bool muted_ = false;
     bool screen_on_ = true;
+    bool dock_ = false;
     CpuMode cpu_ = CpuMode::Balanced;
 };
 
 }  // namespace
+
+void mock_set_hdmi(bool connected) { g_hdmi = connected; }
 
 std::unique_ptr<Hal> make_mock_hal() { return std::make_unique<MockHal>(); }
 

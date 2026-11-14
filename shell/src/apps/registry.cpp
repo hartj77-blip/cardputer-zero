@@ -13,6 +13,7 @@ std::unique_ptr<App> make_compass_app();
 std::unique_ptr<App> make_battery_app();
 std::unique_ptr<App> make_clock_app();
 std::unique_ptr<App> make_sysmon_app();
+std::unique_ptr<App> make_dock_app();
 
 const std::vector<AppInfo>& app_registry() {
     static const std::vector<AppInfo> apps = {
@@ -24,6 +25,7 @@ const std::vector<AppInfo>& app_registry() {
         {"compass", "Compass", LV_SYMBOL_GPS, 0xff8a1f, make_compass_app},
         {"battery", "Battery", LV_SYMBOL_BATTERY_3, 0x3fb950, make_battery_app},
         {"clock", "Clock", LV_SYMBOL_BELL, 0xbc8cff, make_clock_app},
+        {"dock", "Dock", LV_SYMBOL_IMAGE, 0x58a6ff, make_dock_app},
         {"sysmon", "System", LV_SYMBOL_LIST, 0x39c5cf, make_sysmon_app},
         {"settings", "Settings", LV_SYMBOL_SETTINGS, 0x8b97a5, make_settings_app},
     };

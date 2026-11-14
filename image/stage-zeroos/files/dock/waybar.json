@@ -1,0 +1,21 @@
+{
+    "layer": "top",
+    "position": "top",
+    "height": 28,
+    "modules-left": ["custom/menu", "custom/term", "custom/web", "custom/files", "custom/video", "wlr/taskbar"],
+    "modules-center": ["clock"],
+    "modules-right": ["cpu", "memory", "network", "battery", "custom/leave"],
+    "custom/menu":  { "format": "ZeroOS", "on-click": "fuzzel", "tooltip": false },
+    "custom/term":  { "format": "Terminal", "on-click": "foot", "tooltip": false },
+    "custom/web":   { "format": "Web", "on-click": "zeroos-browser", "tooltip": false },
+    "custom/files": { "format": "Files", "on-click": "foot -e mc", "tooltip": false },
+    "custom/video": { "format": "Videos", "on-click": "zeroos-video", "tooltip": false },
+    "custom/leave": { "format": "Leave dock", "on-click": "zeroos-dock stop", "tooltip": false },
+    "wlr/taskbar":  { "format": "{title:.24}", "on-click": "activate", "on-click-middle": "close" },
+    "clock":   { "format": "{:%a %d %b  %H:%M}" },
+    "cpu":     { "format": "CPU {usage}%", "interval": 5 },
+    "memory":  { "format": "RAM {used:0.0f}/{total:0.0f} GB", "interval": 5,
+                 "tooltip-format": "{used:0.2f} GB used, {avail:0.2f} GB available" },
+    "network": { "format-wifi": "{essid}", "format-ethernet": "Wired", "format-disconnected": "Offline" },
+    "battery": { "bat": "bq27220-0", "format": "Battery {capacity}%", "format-charging": "Charging {capacity}%" }
+}

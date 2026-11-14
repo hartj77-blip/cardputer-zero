@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!-- Right-click the desktop (or the bar's menu button) for this menu. -->
+<openbox_menu>
+  <menu id="root-menu" label="ZeroOS">
+    <item label="Terminal"><action name="Execute" command="foot" /></item>
+    <item label="Web browser"><action name="Execute" command="zeroos-browser" /></item>
+    <item label="Files"><action name="Execute" command="foot -e mc" /></item>
+    <item label="Videos"><action name="Execute" command="zeroos-video" /></item>
+    <item label="All apps..."><action name="Execute" command="fuzzel" /></item>
+    <separator />
+    <item label="Leave Dock mode"><action name="Execute" command="zeroos-dock stop" /></item>
+  </menu>
+</openbox_menu>

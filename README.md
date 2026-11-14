@@ -21,7 +21,8 @@ radios, audio, camera, real-time clock, key LEDs and the expansion ports.
 | `.github/workflows/` CI: simulator, screenshots, arm64 build, browser build, full SD image | Ready |
 
 Apps: **Files**, **Notes**, **Media** (music player + voice notes), **Wi-Fi**, **IR Remote** (send + learn), **Compass** (with spirit level),
-**Battery** (time left, power draw, power profile), **Clock** (with stopwatch), **System** monitor (CPU and
+**Battery** (time left, power draw, power profile), **Clock** (with stopwatch), **Dock** (desktop with web
+browser, video, terminal and files on an HDMI monitor), **System** monitor (CPU and
 where the memory goes), **Settings** (Wi-Fi, Bluetooth, brightness, volume, mute, power profile, screen dimming
 and screen-off, Bluetooth auto-off, restart, shut down).
 
@@ -71,6 +72,7 @@ first, copy `build/device/zeroshell` over, stop the stock launcher
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the layers fit together
 - [docs/HARDWARE.md](docs/HARDWARE.md): every chip, how Linux exposes it, known issues and our fixes
 - [docs/ROADMAP.md](docs/ROADMAP.md): phases and what's next
+- [docs/DOCK.md](docs/DOCK.md): Dock mode, the desktop on an HDMI monitor
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md): memory and battery tuning, measurements, and `zeroos-measure`
 
 ## License

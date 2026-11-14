@@ -29,6 +29,12 @@ public:
     // A key went down. Returns true if it only woke the screen (swallow it).
     bool on_key(uint32_t now_ms);
 
+    // Dock mode: the Cardputer's keys type on the monitor, so they neither
+    // wake nor reach ZeroShell; the LCD dims and turns off on its own timer;
+    // the CPU never drops to its screen-off speed.
+    void set_docked(bool docked, uint32_t now_ms);
+    bool docked() const { return docked_; }
+
     bool screen_off() const { return state_ == State::Off; }
     bool dimmed() const { return state_ == State::Dim; }
 
@@ -62,6 +68,9 @@ private:
     void set_state(State s, uint32_t now_ms);
     void apply_cpu();
     void update_estimate(const BatteryInfo& b, uint32_t now_ms);
+    void watch_dock(uint32_t now_ms);
+    bool hdmi_was_ = false;
+    uint32_t hdmi_lost_ = 0, last_dock_check_ = 0;
 
     State state_ = State::On;
     Profile profile_ = Profile::Balanced;
@@ -70,7 +79,8 @@ private:
     int brightness_ = 80;
     int dim_after_s_ = 30, off_after_s_ = 60, bt_auto_off_min_ = 10;
     bool wifi_sleep_ = false, show_time_left_ = true;
-    bool wifi_slept_ = false;    // we turned Wi-Fi off; turn it back on at wake
+    bool wifi_slept_ = false;
+    bool docked_ = false;    // we turned Wi-Fi off; turn it back on at wake
     uint32_t last_input_ = 0, off_since_ = 0, bt_idle_since_ = 0, last_sample_ = 0;
     double avg_mw_ = 0;
     uint32_t avg_ms_ = 0;        // how long the average has been running

@@ -5,6 +5,8 @@
 
 #include <algorithm>
 
+#include <cctype>
+
 #include "apps/common.h"
 
 namespace zs {
@@ -109,9 +111,22 @@ private:
         if (pick_ < 0 || pick_ >= int(entries_.size())) return;
         auto e = entries_[pick_];
         std::string full = cwd_ + (cwd_ == "/" ? "" : "/") + e.name;
+        std::string ext = e.name.substr(e.name.rfind('.') == std::string::npos ? e.name.size() : e.name.rfind('.'));
+        for (auto& ch : ext) ch = char(std::tolower((unsigned char)ch));
+        auto is = [&](std::initializer_list<const char*> l) {
+            for (auto x : l) if (ext == x) return true;
+            return false;
+        };
         if (e.dir) {
             cwd_ = full;
             refresh();
+        } else if (is({".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v"})) {
+            // Video plays on the HDMI monitor in Dock mode.
+            if (hal().dock_open("video", full)) shell_toast("Playing on the monitor");
+            else shell_toast("Videos play on a monitor: open Dock");
+        } else if (is({".mp3", ".flac", ".ogg", ".wav", ".m4a", ".opus"})) {
+            hal().play(full);
+            shell_toast("Playing " + e.name);
         } else if (e.size < 64 * 1024) {
             notes_set_pending_file(full);
             shell_open_app("notes");

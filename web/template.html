@@ -94,6 +94,7 @@ dd { margin: 0; color: var(--muted); align-self: center; }
   border-radius: 999px; padding: 5px 11px; font: 500 13px var(--font-body); cursor: pointer;
 }
 .apps button:hover, .apps button:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+.apps button.on { border-color: var(--accent); color: var(--accent); }
 .fine { font-size: 12px; color: #6b7682; line-height: 1.5; margin: 0; }
 </style>
 
@@ -253,7 +254,7 @@ dd { margin: 0; color: var(--muted); align-self: center; }
   });
 
   // Jump-to-app chips, in launcher order.
-  const apps = ["Files", "Notes", "Media", "Wi-Fi", "IR Remote", "Compass", "Battery", "Clock", "System", "Settings"];
+  const apps = ["Files", "Notes", "Media", "Wi-Fi", "IR Remote", "Compass", "Battery", "Clock", "Dock", "System", "Settings"];
   const appsEl = document.getElementById("apps");
   const homeBtn = document.createElement("button");
   homeBtn.type = "button"; homeBtn.textContent = "Home";
@@ -266,6 +267,20 @@ dd { margin: 0; color: var(--muted); align-self: center; }
     b.addEventListener("click", () => { if (mod) mod._zs_web_open(i); canvas.focus({ preventScroll: true }); });
     appsEl.appendChild(b);
   });
+  // Pretend HDMI monitor: try Dock mode. Docked, the real keyboard types on the
+  // monitor, so the device screen ignores keys until you unplug.
+  let hdmi = false;
+  const hdmiBtn = document.createElement("button");
+  hdmiBtn.type = "button";
+  hdmiBtn.textContent = "Plug in monitor";
+  hdmiBtn.addEventListener("click", () => {
+    hdmi = !hdmi;
+    if (mod) mod._zs_web_hdmi(hdmi ? 1 : 0);
+    hdmiBtn.textContent = hdmi ? "Unplug monitor" : "Plug in monitor";
+    hdmiBtn.classList.toggle("on", hdmi);
+    canvas.focus({ preventScroll: true });
+  });
+  appsEl.appendChild(hdmiBtn);
 
   render();
   requestAnimationFrame(frame);

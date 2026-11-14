@@ -32,6 +32,9 @@ STEPS+=",key:r,wait:300,shot:15-media-voice-notes.ppm"
 STEPS+=",open:settings,down,down,shot:12-settings.ppm"
 STEPS+=",open:settings,down,down,down,down,down,down,down,down,wait:300,shot:17-settings-power.ppm"
 STEPS+=",home,wait:31000,shot:18-screen-dimmed.ppm"
+STEPS+=",right,open:dock,wait:600,shot:19-dock-no-monitor.ppm"
+STEPS+=",hdmi:1,wait:1500,shot:20-dock-monitor.ppm"
+STEPS+=",enter,wait:1500,shot:21-docked.ppm,hdmi:0,wait:4500"
 
 (cd "$OUT" && HOME="$DEMO" TZ=UTC "$BIN" --script "$STEPS")
 python3 "$HERE/ppm2png.py" "$OUT"

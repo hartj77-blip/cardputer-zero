@@ -22,6 +22,7 @@
 #include <sstream>
 #include <vector>
 
+#include "hal/hal.h"
 #include "hal/play_clock.h"
 #include "ui/shell.h"
 
@@ -212,6 +213,8 @@ EMSCRIPTEN_KEEPALIVE void zs_web_open(int index) {
     if (index >= 0 && index < int(apps.size())) shell_open_app(apps[index].id);
     else shell_go_home();
 }
+// Pretend HDMI monitor for trying Dock mode in the browser.
+EMSCRIPTEN_KEEPALIVE void zs_web_hdmi(int connected) { mock_set_hdmi(connected != 0); }
 EMSCRIPTEN_KEEPALIVE int zs_web_take_dirty() {
     int d = g_dirty;
     g_dirty = 0;
@@ -364,6 +367,7 @@ int platform_run_script(const std::string& script) {
         else if (cmd == "key" && !arg.empty()) g_keys.push_back(uint32_t((unsigned char)arg[0]));
         else if (cmd == "open") { drain_keys(); shell_open_app(arg); run_for(100); }
         else if (cmd == "home") { drain_keys(); shell_go_home(); run_for(100); }
+        else if (cmd == "hdmi") { mock_set_hdmi(arg == "1"); run_for(100); }
         else if (cmd == "wait") run_for(uint32_t(std::atoi(arg.c_str())));
         else if (cmd == "shot") { drain_keys(); run_for(400); if (!save_ppm(arg)) ++failures; }
         else { std::fprintf(stderr, "unknown script step: %s\n", step.c_str()); ++failures; }

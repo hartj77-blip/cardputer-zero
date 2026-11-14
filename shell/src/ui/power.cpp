@@ -45,11 +45,13 @@ void Power::start() {
 Profile Power::effective_profile() const { return low_saver_ ? Profile::Saver : profile_; }
 
 void Power::apply_cpu() {
-    if (state_ == State::Off) {
+    if (state_ == State::Off && !docked_) {
         hal().set_cpu_mode(CpuMode::ScreenOff);
         return;
     }
-    switch (effective_profile()) {
+    Profile p = effective_profile();
+    if (docked_ && p == Profile::Saver) p = Profile::Balanced;   // a desktop needs the speed
+    switch (p) {
     case Profile::Saver: hal().set_cpu_mode(CpuMode::Saver); break;
     case Profile::Performance: hal().set_cpu_mode(CpuMode::Performance); break;
     default: hal().set_cpu_mode(CpuMode::Balanced); break;
@@ -107,6 +109,7 @@ void Power::set_state(State s, uint32_t now_ms) {
 }
 
 bool Power::on_key(uint32_t now_ms) {
+    if (docked_) return true;   // typing on the monitor; ZeroShell stays out of it
     last_input_ = now_ms;
     bool was_off = state_ == State::Off;
     set_state(State::On, now_ms);
@@ -145,16 +148,60 @@ void Power::update_estimate(const BatteryInfo& b, uint32_t now_ms) {
         minutes_left_ = b.minutes_left;   // the gauge's own figure until ours settles
 }
 
+void Power::set_docked(bool docked, uint32_t now_ms) {
+    if (docked == docked_) return;
+    docked_ = docked;
+    last_input_ = now_ms;
+    if (docked) shell_open_app("dock");   // the LCD shows what's on the monitor
+    set_state(State::On, now_ms);
+    apply_cpu();
+    shell_screen_changed();
+}
+
+// HDMI plugged in: open the Dock app, or start Dock mode (dock.on_hdmi =
+// ask | auto | off). Monitor unplugged for 3 s: stop Dock mode.
+void Power::watch_dock(uint32_t now_ms) {
+    if (now_ms - last_dock_check_ < 1000) return;
+    last_dock_check_ = now_ms;
+    auto& h = hal();
+    DisplayStatus d = h.display();
+    if (d.hdmi_connected && !hdmi_was_ && !d.dock_running) {
+        std::string mode = prefs::get_str("dock.on_hdmi", "ask");
+        if (mode == "auto") {
+            h.dock_start();
+            shell_toast("Monitor connected: starting Dock mode");
+        } else if (mode == "ask") {
+            set_state(State::On, now_ms);
+            last_input_ = now_ms;
+            shell_open_app("dock");
+        }
+    }
+    hdmi_was_ = d.hdmi_connected;
+    if (d.dock_running && !d.hdmi_connected) {
+        if (!hdmi_lost_) hdmi_lost_ = now_ms;
+        if (now_ms - hdmi_lost_ >= 3000) {
+            h.dock_stop();
+            hdmi_lost_ = 0;
+            d.dock_running = false;
+            shell_toast("Monitor unplugged: Dock mode off");
+        }
+    } else {
+        hdmi_lost_ = 0;
+    }
+    set_docked(d.dock_running, now_ms);
+}
+
 void Power::tick(uint32_t now_ms) {
     auto& h = hal();
     if (!last_input_) last_input_ = now_ms;
+    watch_dock(now_ms);
     BatteryInfo b = h.battery();
     update_estimate(b, now_ms);
 
     // Screen: dim, then off. Plugged in: dim only, never off.
     uint32_t idle = now_ms - last_input_;
     if (state_ != State::Off) {
-        if (off_after_s_ > 0 && !b.external_power && idle >= uint32_t(off_after_s_) * 1000)
+        if (off_after_s_ > 0 && (docked_ || !b.external_power) && idle >= uint32_t(off_after_s_) * 1000)
             set_state(State::Off, now_ms);
         else if (dim_after_s_ > 0 && idle >= uint32_t(dim_after_s_) * 1000)
             set_state(State::Dim, now_ms);

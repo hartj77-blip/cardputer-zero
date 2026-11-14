@@ -1,0 +1,11 @@
+# labwc autostart for Dock mode (runs with sh).
+# Resolution: 720p by default (lighter on the GPU and on memory); set
+# dock.resolution=1080p or auto in ~/.config/zeroos/settings.conf (or in the
+# Dock app on the Cardputer).
+res=$(sed -n 's/^dock.resolution=//p' "$HOME/.config/zeroos/settings.conf" 2>/dev/null)
+case "${res:-720p}" in
+    720p)  wlr-randr --output HDMI-A-1 --mode 1280x720 >/dev/null 2>&1 ;;
+    1080p) wlr-randr --output HDMI-A-1 --mode 1920x1080 >/dev/null 2>&1 ;;
+esac
+swaybg -c '#0b0f14' >/dev/null 2>&1 &
+waybar -c /etc/zeroos/dock/waybar.json -s /etc/zeroos/dock/waybar.css >/dev/null 2>&1 &

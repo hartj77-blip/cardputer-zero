@@ -121,6 +121,13 @@ struct SystemInfo {
     bool simulated = false;     // mock backend: numbers are illustrative
 };
 
+// The HDMI port and Dock mode (a desktop on the monitor, see docs/DOCK.md).
+struct DisplayStatus {
+    bool hdmi_connected = false;
+    std::string hdmi_mode;        // preferred mode, e.g. "1920x1080"
+    bool dock_running = false;
+};
+
 class Hal {
 public:
     virtual ~Hal() = default;
@@ -145,6 +152,14 @@ public:
     // False in the simulator: the shell then dims and blanks by drawing.
     virtual bool has_backlight() = 0;
     virtual void set_cpu_mode(CpuMode mode) = 0;
+
+    // HDMI and Dock mode.
+    virtual DisplayStatus display() = 0;
+    virtual void dock_start() = 0;
+    virtual void dock_stop() = 0;
+    // Open something on the monitor: "terminal", "browser", "files", or
+    // "video" with a file path. False if Dock mode isn't running.
+    virtual bool dock_open(const std::string& what, const std::string& path = "") = 0;
     virtual int volume() = 0;                // 0..100
     virtual void set_volume(int pct) = 0;
     virtual bool muted() = 0;
@@ -183,6 +198,9 @@ public:
 // MockHal for the simulator and tests; LinuxHal for the device.
 std::unique_ptr<Hal> make_mock_hal();
 std::unique_ptr<Hal> make_linux_hal();
+
+// Simulator only: plug or unplug a pretend HDMI monitor.
+void mock_set_hdmi(bool connected);
 
 // Global accessor used by the UI.
 Hal& hal();

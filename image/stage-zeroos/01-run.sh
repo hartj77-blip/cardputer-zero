@@ -18,6 +18,14 @@ install -m 0644 files/earlyoom               "${ROOTFS_DIR}/etc/default/earlyoom
 install -m 0644 files/zeroos-cloud-init-once.service "${ROOTFS_DIR}/etc/systemd/system/"
 install -m 0755 files/zeroos-measure         "${ROOTFS_DIR}/usr/bin/zeroos-measure"
 install -D -m 0755 files/zeroos-power-perms  "${ROOTFS_DIR}/usr/lib/zeroos/power-perms"
+# Dock mode: labwc desktop on the HDMI monitor (docs/DOCK.md).
+install -d -m 0755                           "${ROOTFS_DIR}/etc/zeroos/dock"
+install -m 0644 files/dock/rc.xml files/dock/menu.xml files/dock/autostart files/dock/environment \
+                files/dock/waybar.json files/dock/waybar.css "${ROOTFS_DIR}/etc/zeroos/dock/"
+install -m 0755 files/dock/dock-session      "${ROOTFS_DIR}/usr/lib/zeroos/dock-session"
+install -m 0755 files/dock/zeroos-dock files/dock/zeroos-browser files/dock/zeroos-video "${ROOTFS_DIR}/usr/bin/"
+install -m 0644 files/dock/zeroos-dock.service "${ROOTFS_DIR}/etc/systemd/system/"
+install -d -o 1000 -g 1000 "${ROOTFS_DIR}/home/${FIRST_USER_NAME}/Videos" 2>/dev/null || true
 install -D -m 0644 files/nm-wifi-powersave.conf "${ROOTFS_DIR}/etc/NetworkManager/conf.d/90-zeroos-powersave.conf"
 cat files/initramfs-modules >>               "${ROOTFS_DIR}/etc/initramfs-tools/modules"
 install -m 0755 files/initramfs-hook         "${ROOTFS_DIR}/etc/initramfs-tools/hooks/zeroos-panel"

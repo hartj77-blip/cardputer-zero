@@ -1,0 +1,24 @@
+# Dock mode: a small Wayland desktop (labwc) on the HDMI monitor, as user pi.
+# ZeroShell keeps running on the built-in screen. Started by ZeroShell (Dock
+# app, or when a monitor is plugged in) or with `zeroos-dock start`.
+[Unit]
+Description=ZeroOS Dock mode (desktop on the HDMI monitor)
+After=systemd-user-sessions.service zeroshell.service
+
+[Service]
+User=pi
+# A logind session on tty2 gives labwc the HDMI display and input devices.
+PAMName=login
+TTYPath=/dev/tty2
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+UtmpIdentifier=tty2
+UtmpMode=user
+ExecStart=/usr/lib/zeroos/dock-session
+Restart=no
+# The desktop is what earlyoom should sacrifice first, never ZeroShell.
+OOMScoreAdjust=200
