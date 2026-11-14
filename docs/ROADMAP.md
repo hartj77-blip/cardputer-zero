@@ -1,16 +1,72 @@
 # Roadmap
 
-Each phase ends with a tagged image you can flash.
+**Goal:** a general-purpose portable computer that does as much as possible on 512 MB of RAM and a
+1 GHz quad-core A53.
 
-1. **Phase 0, before the device arrives (this PR).** Shell, launcher and 10 apps in a simulator;
-   hardware layer with simulated and Linux backends; image builder on M5's pi-gen; CI with
-   screenshots and an arm64 build.
-2. **Phase 1, bring-up on the device.** Flash, confirm display, keyboard, battery, Wi-Fi, audio, RTC,
-   IMU, IR. Fix device paths. Measure boot time and idle power. Move the Linux hardware code into
-   `zerod` (D-Bus). Key LEDs follow Shift/Fn/Sym. Low-battery warning and safe shutdown.
-3. **Phase 2, core apps.** Terminal, alarms, playlists and background playback for Media, camera with QR scanner,
-   Bluetooth pairing, IR remote profiles.
-4. **Phase 3, power-user features.** USB gadget modes (serial, Ethernet, mass storage, webcam),
-   HDMI desktop mode, Grove and EXT module auto-detect (LoRa/GPS, Sub-GHz, NFC, RFID caps),
-   A/B over-the-air updates.
-5. **Phase 4, polish.** Themes, Python app SDK, store integration, docs.
+**Design rule:** it can do almost anything, but only one heavy thing at a time.
+
+Items marked *(measure)* are estimates to confirm on the real unit before we rely on them.
+
+## Three modes
+
+| Mode | When | What it is |
+| --- | --- | --- |
+| **Pocket** | On the go, on battery | Terminal-first on the built-in screen, tuned for battery. Boots to the terminal with the launcher one key away. A setting picks the boot target: terminal or launcher. The graphical UI stays; it is small. |
+| **Dock** | HDMI monitor + USB keyboard | A small desktop. The best place for video and web browsing. |
+| **Remote** | Anywhere with a network | The device is a screen and keyboard for a home PC or cloud machine, over SSH or remote desktop. Heavy work runs elsewhere. |
+
+## Tailscale
+
+- Remote mode runs over Tailscale, so the home PC is reachable from any network without port forwarding.
+- **Taildrop** for sending files to and from the device.
+- A toggle in Settings, a terminal shortcut, and an indicator in the status bar.
+- **On when needed** by default: it starts with Wi-Fi in Remote mode. An **always on** option is in Settings.
+- Sign-in by link or QR code shown on screen and approved from a phone.
+- Memory and battery cost of `tailscaled` *(measure)*.
+
+## Memory and CPU
+
+- **zram** compressed swap on by default (already in the image). Real gain *(measure)*.
+- A small **swap file on the SD card** as a last-resort safety net, not for everyday use.
+- **Lean base:** no desktop environment; strip services we don't use.
+- **One app in front:** background apps are frozen or closed.
+- **Minimal GPU memory** (`gpu_mem=32`), raised only when the camera or HDMI is in use.
+- **CPU governor:** fast while typing, slow when idle. An optional **Boost** toggle for a mild overclock.
+- **Load on demand:** graphics-heavy apps (video player, web browser) start when opened and fully unload on close.
+- **System monitor:** real memory and CPU readouts, including ZeroShell's own usage *(measure)*.
+
+## Battery
+
+Battery is likely the daily limit (stock idle is about 2.5 W on a 1750 mAh cell, and there is no
+suspend). So: dim the screen quickly, turn radios off when unused, keep the CPU slow when idle, and
+show time-left estimates in the status bar.
+
+## What runs where
+
+| Tier | Examples |
+| --- | --- |
+| **Runs well on the device** | Terminal, coding, SSH, notes, files, text email and chat, music, voice memos, camera, QR scanning, IR remote, e-books and documents, light text or reader-style browsing |
+| **Runs with care** | Video at modest resolution with hardware decoding *(measure)*; a full modern browser, available but not the default |
+| **Borrowed (Remote mode)** | Heavy websites, big builds, AI tools |
+
+## Hardware extras
+
+- Keyboard shortcuts everywhere, readable fonts, split views in the terminal.
+- Note and file sync over Wi-Fi.
+- Phone as a hotspot.
+- IR universal remote (started: IR Remote app).
+- Motion sensor: wake on pickup, sleep when placed face down.
+- Expansion ports for GPS or LoRa modules later.
+
+## Order of work
+
+1. **Lean base and memory tuning, with real measurements.** Includes device bring-up: display, keyboard, battery, Wi-Fi, audio, RTC, IMU and IR working on the unit.
+2. **Battery life.** Governor, dimming, radio management, time-left estimates.
+3. **Dock mode.** HDMI desktop, video, web browsing.
+4. **Extras.** Tailscale and Remote mode polish, sync, motion gestures, expansion modules.
+
+## Done so far (Phase 0)
+
+ZeroShell with 10 apps (Files, Notes, Media, Wi-Fi, IR Remote, Compass, Battery, Clock, System,
+Settings) running in a desktop and browser simulator; a hardware layer with simulated and Linux
+backends; the image builder on M5's pinned pi-gen; CI with screenshots, an arm64 build and the browser build.
