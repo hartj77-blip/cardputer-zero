@@ -1,7 +1,13 @@
 name: Build image
 
-# Manual: builds a flashable .img.xz (1-2 hours). Run it from the Actions tab.
+# Builds the flashable ZeroOS .img.xz (about 1.5-3 hours: an x86 runner builds
+# the arm64 system under qemu). It runs on pull requests that change the image,
+# and by hand from the Actions tab.
 on:
+  pull_request:
+    paths:
+      - image/**
+      - .github/workflows/image.yml
   workflow_dispatch:
     inputs:
       wifi_country:
@@ -9,18 +15,33 @@ on:
         default: US
         required: true
 
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   image:
     runs-on: ubuntu-24.04
-    timeout-minutes: 240
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # git describe for the version string
       - name: Free disk space
-        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc && df -h /
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+                      /opt/hostedtoolcache /usr/share/swift /usr/local/share/boost
+          sudo docker image prune -af >/dev/null || true
+          df -h /
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++-aarch64-linux-gnu qemu-user-static binfmt-support
+          sudo apt-get install -y cmake g++-aarch64-linux-gnu \
+            coreutils quilt parted debootstrap zerofree zip dosfstools libarchive-tools \
+            libcap2-bin grep rsync xz-utils file git curl bc gpg pigz xxd arch-test \
+            qemu-user-static kmod binfmt-support e2fsprogs
+          sudo update-binfmts --enable qemu-aarch64 || true
+          ls /proc/sys/fs/binfmt_misc/
       - name: Build ZeroShell (arm64)
         run: |
           cmake -S shell -B build/device -DZS_BACKEND=device \
@@ -29,10 +50,21 @@ jobs:
           aarch64-linux-gnu-strip build/device/zeroshell
       - name: Build image
         env:
-          WIFI_COUNTRY: ${{ inputs.wifi_country }}
+          WIFI_COUNTRY: ${{ inputs.wifi_country || 'US' }}
+          PIGEN_NATIVE: 1
         run: image/build.sh build/device/zeroshell
+      - name: Image contents check
+        run: |
+          ls -la build/image/pi-gen/deploy/
+          sudo tail -40 build/image/pi-gen/deploy/build.log || true
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: zeroos-image
-          path: build/image/pi-gen/deploy/*.img.xz
+          path: |
+            build/image/pi-gen/deploy/*.img.xz
+            build/image/pi-gen/deploy/*.info
+            build/image/pi-gen/deploy/build.log
           compression-level: 0
+          retention-days: 14
+          if-no-files-found: warn

@@ -5,6 +5,7 @@
 
 #include "hal/hal.h"
 #include "hal/play_clock.h"
+#include "hal/proc_stats.h"
 
 namespace zs {
 namespace {
@@ -55,10 +56,29 @@ public:
         s.model = "CardputerZero";
         s.kernel = "6.18.39+rpt-rpi-v8 (simulated)";
         s.os_version = "ZeroOS " ZS_VERSION;
+        s.simulated = true;
         s.cpu_temp_c = 47;
-        s.cpu_load_percent = 12;
-        s.mem_used_mb = 118;
+        s.cpu_load_percent = 9 + int(ticks_ / 7 % 5);
+        s.cpu_mhz = s.cpu_load_percent > 10 ? 1000 : 600;
+        s.cpu_max_mhz = 1000;
+        s.cpu_governor = "ondemand";
+        // Illustrative numbers (not measured): ZeroOS idle on a 512 MB unit.
         s.mem_total_mb = 438;
+        s.mem_used_mb = 96;
+        s.mem_avail_mb = 342;
+        s.mem_cache_mb = 71;
+        s.zram_stored_mb = 18.4f;
+        s.zram_ram_mb = 6.6f;
+        s.zram_capacity_mb = 657;
+        s.disk_swap_total_mb = 0;   // zram+file: the SD file is writeback, not swap
+        s.disk_swap_used_mb = 0;
+        // The shell's own memory is real when the platform can report it.
+        if (!read_self_mem(s.self_rss_kb, s.self_peak_kb)) {
+            s.self_rss_kb = 9800;
+            s.self_peak_kb = 10400;
+        }
+        s.top_procs = {{"zeroshell", s.self_rss_kb}, {"NetworkManager", 14200}, {"pipewire", 9100},
+                       {"wireplumber", 8700}, {"systemd", 8300}};
         s.disk_used_gb10 = 31;
         s.disk_total_gb10 = 290;
         s.uptime_s = 3600 + ticks_ / 10;

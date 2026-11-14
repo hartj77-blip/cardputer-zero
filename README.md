@@ -68,6 +68,7 @@ first, copy `build/device/zeroshell` over, stop the stock launcher
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the layers fit together
 - [docs/HARDWARE.md](docs/HARDWARE.md): every chip, how Linux exposes it, known issues and our fixes
 - [docs/ROADMAP.md](docs/ROADMAP.md): phases and what's next
+- [docs/PERFORMANCE.md](docs/PERFORMANCE.md): memory and battery tuning, measurements, and `zeroos-measure`
 
 ## License
 

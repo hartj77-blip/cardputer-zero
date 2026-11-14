@@ -26,7 +26,7 @@ Items marked *(measure)* are estimates to confirm on the real unit before we rel
 
 ## Memory and CPU
 
-- **zram** compressed swap on by default (already in the image). Real gain *(measure)*.
+- **zram** compressed swap on by default (already in the image), with idle pages written back to an SD swap file. Real gain *(measure)*; see [PERFORMANCE.md](PERFORMANCE.md).
 - A small **swap file on the SD card** as a last-resort safety net, not for everyday use.
 - **Lean base:** no desktop environment; strip services we don't use.
 - **One app in front:** background apps are frozen or closed.

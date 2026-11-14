@@ -43,4 +43,4 @@ The `Hal` interface stays the same.
 2. removes M5's launcher and demo apps;
 3. stops after stage 2 (no desktop, 512 MB RAM);
 4. adds `stage2/06-zeroos` (`image/stage-zeroos/`): ZeroShell as a systemd service, polkit and udev
-   rules so it runs as `pi`, zram swap, and the fixes from early owner reports (see HARDWARE.md).
+   rules so it runs as `pi`, memory tuning (zram + SD writeback, earlyoom, logs in RAM; see PERFORMANCE.md), and the fixes from early owner reports (see HARDWARE.md).

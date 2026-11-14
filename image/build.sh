@@ -10,8 +10,9 @@
 #   - add stage2/06-zeroos: ZeroShell, services, and fixes from early owner reports
 #
 # Usage: image/build.sh [path/to/zeroshell-arm64]
-# Env:   WIFI_COUNTRY (default US), FIRST_USER_PASS (default raspberry), WORK (build dir)
-# Needs: Docker (pi-gen's build-docker.sh), ~20 GB disk, 1-2 hours. arm64 host is fastest.
+# Env:   WIFI_COUNTRY (default US), FIRST_USER_PASS (default raspberry), WORK (build dir),
+#        PIGEN_NATIVE=1 to run pi-gen directly with sudo instead of in Docker
+# Needs: Docker (or root for native), ~20 GB disk, 1-2 hours. arm64 host is fastest.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -56,7 +57,8 @@ rm -f stage4/EXPORT_IMAGE stage5/EXPORT_IMAGE
 rm -rf stage2/06-zeroos
 cp -r "$HERE/stage-zeroos" stage2/06-zeroos
 install -m 0755 "$ZEROSHELL_BIN" stage2/06-zeroos/files/zeroshell
-sed -i "s|@WIFI_COUNTRY@|${WIFI_COUNTRY:-US}|g" stage2/06-zeroos/01-run.sh
+ZEROOS_VERSION=${ZEROOS_VERSION:-$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || echo dev)}
+sed -i -e "s|@WIFI_COUNTRY@|${WIFI_COUNTRY:-US}|g" -e "s|@ZEROOS_VERSION@|${ZEROOS_VERSION}|g" stage2/06-zeroos/01-run.sh
 
 IMG_DATE=$(date +%Y-%m-%d)
 cat > config <<CONFIG
@@ -78,5 +80,10 @@ WPA_COUNTRY=${WIFI_COUNTRY:-US}
 STAGE_LIST="stage0 stage1 stage2"
 CONFIG
 
-./build-docker.sh
+# Native build (needs root, qemu-user-static and binfmt on non-arm64 hosts) or Docker.
+if [ "${PIGEN_NATIVE:-0}" = 1 ]; then
+    sudo XZ_DEFAULTS="-T0" ./build.sh
+else
+    ./build-docker.sh
+fi
 echo "Image written to $WORK/pi-gen/deploy/"

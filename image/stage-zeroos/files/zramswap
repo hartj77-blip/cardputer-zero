@@ -1,4 +1,0 @@
-# ZeroOS: 512 MB RAM is tight; compressed swap in RAM.
-ALGO=zstd
-PERCENT=75
-PRIORITY=100

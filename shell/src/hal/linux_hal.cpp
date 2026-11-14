@@ -34,6 +34,7 @@
 
 #include "hal/hal.h"
 #include "hal/play_clock.h"
+#include "hal/proc_stats.h"
 
 namespace zs {
 namespace {
@@ -212,13 +213,12 @@ public:
         s.cpu_temp_c = int(read_long("/sys/class/thermal/thermal_zone0/temp") / 1000);
 #ifndef __EMSCRIPTEN__  // the web demo always uses MockHal
         struct sysinfo si{};
-        if (sysinfo(&si) == 0) {
-            s.uptime_s = si.uptime;
-            s.mem_total_mb = int(si.totalram * si.mem_unit / (1024 * 1024));
-            s.mem_used_mb = int((si.totalram - si.freeram - si.bufferram) * si.mem_unit / (1024 * 1024));
-            s.cpu_load_percent = int(si.loads[0] / 65536.0 / 4 * 100);
-        }
+        if (sysinfo(&si) == 0) s.uptime_s = si.uptime;
 #endif
+        read_mem_cpu(s, cpu_prev_);
+        // Scanning every process costs a little; refresh the list every few calls.
+        if (top_.empty() || ++top_calls_ % 3 == 0) top_ = top_processes(5);
+        s.top_procs = top_;
         struct statvfs vfs{};
         if (statvfs("/", &vfs) == 0) {
             double total = double(vfs.f_blocks) * vfs.f_frsize;
@@ -466,6 +466,9 @@ private:
         return -1;
     }
 
+    long long cpu_prev_[2] = {0, 0};
+    std::vector<ProcMem> top_;
+    int top_calls_ = 0;
     pid_t play_pid_ = -1, rec_pid_ = -1;
     PlaybackState pb_;
     RecordState rec_;

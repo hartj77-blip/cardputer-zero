@@ -34,7 +34,7 @@ Sources: [M5 CardputerZero docs](https://docs.m5stack.com/en/CardputerZero), M5'
 | Keys leak to the Linux console behind the UI | Mask `getty@tty1`; ZeroShell conflicts with it |
 | LCD blank without Plymouth (driver not in initramfs) | Panel modules + `cardputerzero,st7789v_lcd.bin` in the initramfs |
 | LCD blanks when console-setup runs | Drop-in that unblanks fb0 afterwards |
-| 512 MB RAM is tight | No desktop, `gpu_mem=32`, zram swap at 75% (zstd) |
+| 512 MB RAM is tight | No desktop, `gpu_mem=32`, zram (zstd, 1.5x RAM) with SD writeback via rpi-swap, earlyoom, trimmed services; see PERFORMANCE.md |
 | armhf enabled, apt twice as slow | Remove the armhf architecture |
 | nexmon breaks onboard Wi-Fi | Purge `brcmfmac-nexmon-dkms` |
 | Wi-Fi region hard-coded to AE | `cfg80211.ieee80211_regdom` from `WIFI_COUNTRY` (default US) |

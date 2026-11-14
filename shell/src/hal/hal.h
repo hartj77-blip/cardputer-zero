@@ -79,16 +79,34 @@ struct RecordState {
     int elapsed_ms = 0;
 };
 
+struct ProcMem {
+    std::string name;
+    int rss_kb = 0;
+};
+
 struct SystemInfo {
     std::string hostname;
     std::string model;          // "CardputerZero" or "CardputerZero Lite"
     std::string kernel;
     std::string os_version;
     int cpu_temp_c = 0;
-    int cpu_load_percent = 0;
+    int cpu_load_percent = 0;   // all cores, since the previous call
+    int cpu_mhz = 0, cpu_max_mhz = 0;
+    std::string cpu_governor;
+    // Memory, from /proc/meminfo. "Used" = total - available (cache doesn't count).
     int mem_used_mb = 0, mem_total_mb = 0;
+    int mem_avail_mb = 0, mem_cache_mb = 0;
+    // zram: data stored vs the RAM it takes (ratio = stored / taken)
+    float zram_stored_mb = 0, zram_ram_mb = 0;
+    int zram_capacity_mb = 0;
+    // Swap that isn't zram (the SD card swap file / writeback)
+    int disk_swap_used_mb = 0, disk_swap_total_mb = 0;
+    // The shell's own memory
+    int self_rss_kb = 0, self_peak_kb = 0;
+    std::vector<ProcMem> top_procs;   // biggest resident first, up to 5
     int disk_used_gb10 = 0, disk_total_gb10 = 0;  // tenths of GB
     long uptime_s = 0;
+    bool simulated = false;     // mock backend: numbers are illustrative
 };
 
 class Hal {
