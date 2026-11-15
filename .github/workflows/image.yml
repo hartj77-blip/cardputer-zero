@@ -49,7 +49,7 @@ jobs:
           pkgs=$(grep -v '^#' image/stage-zeroos/*-packages | tr '\n' ' ')
           # The same Raspberry Pi archive key pi-gen installs (the old .gpg.key
           # on the archive is SHA-1 signed and rejected by trixie's apt).
-          curl -fsSL -o /tmp/rpi.pgp https://raw.githubusercontent.com/CardputerZero/pi-gen/e3b4e323782a59a426b92356248f5bc09a098be1/stage0/files/raspberrypi-archive-keyring.pgp
+          curl -fsSL -o /tmp/rpi.pgp https://raw.githubusercontent.com/CardputerZero/pi-gen/e3b4e323782a59a426b92356248f5bc09a098be1/stage0/00-configure-apt/files/raspberrypi-archive-keyring.pgp
           docker run --rm --platform linux/arm64 -v /tmp/rpi.pgp:/usr/share/keyrings/rpi.gpg:ro debian:trixie sh -euc "
             apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates >/dev/null
             echo 'deb [signed-by=/usr/share/keyrings/rpi.gpg] http://archive.raspberrypi.com/debian trixie main' > /etc/apt/sources.list.d/rpi.list
