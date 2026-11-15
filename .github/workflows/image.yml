@@ -42,6 +42,20 @@ jobs:
             qemu-user-static kmod binfmt-support e2fsprogs
           sudo update-binfmts --enable qemu-aarch64 || true
           ls /proc/sys/fs/binfmt_misc/
+      - name: Check package names (fast fail, ~3 min)
+        # A trixie arm64 container with Raspberry Pi's repository resolves our
+        # package list before the hour-long base build starts.
+        run: |
+          pkgs=$(grep -v '^#' image/stage-zeroos/*-packages | tr '\n' ' ')
+          docker run --rm --platform linux/arm64 debian:trixie sh -euc "
+            apt-get update -qq && apt-get install -y -qq curl gpg ca-certificates >/dev/null
+            curl -fsSL https://archive.raspberrypi.com/debian/raspberrypi.gpg.key | gpg --dearmor -o /usr/share/keyrings/rpi.gpg
+            echo 'deb [signed-by=/usr/share/keyrings/rpi.gpg] http://archive.raspberrypi.com/debian trixie main' > /etc/apt/sources.list.d/rpi.list
+            curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg -o /usr/share/keyrings/tailscale-archive-keyring.gpg
+            curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.tailscale-keyring.list -o /etc/apt/sources.list.d/tailscale.list
+            apt-get update -qq
+            apt-get install -s $pkgs tailscale > /tmp/plan.txt
+            grep -c '^Inst' /tmp/plan.txt"
       - name: Build ZeroShell (arm64)
         run: |
           cmake -S shell -B build/device -DZS_BACKEND=device \

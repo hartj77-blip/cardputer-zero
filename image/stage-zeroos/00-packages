@@ -11,7 +11,8 @@ v4l-utils
 rpicam-apps-lite
 earlyoom
 console-setup
-policykit-1
+polkitd
+pkexec
 fonts-noto-cjk
 i2c-tools
 python3-smbus2
