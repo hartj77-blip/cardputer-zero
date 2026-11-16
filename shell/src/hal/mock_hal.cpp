@@ -1,4 +1,5 @@
 // Simulated hardware for running ZeroShell on a PC.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -165,6 +166,49 @@ public:
         std::printf("[mock-taildrop] %s -> %s\n", path.c_str(), peer.c_str());
         return ts_on_ && ts_signed_in_;
     }
+    // Sync, simulated: ready after 2 s, "desktop" connects and Documents
+    // catches up over ~12 s, and "phone" asks to connect after 6 s.
+    SyncStatus sync() override {
+        SyncStatus s;
+        s.installed = true;
+        s.running = sync_on_;
+        if (!sync_on_ || sync_clock_.ms() < 2000) return s;
+        long t = sync_clock_.ms();
+        s.ready = true;
+        s.device_id = "K7QX2FA-MZ4D6VR-3TNHB5L-PW2YC7E-JQ6U4SG-XA5LKD3-RV7ME2N-HC4ZT6B";
+        int docs = int(std::min<long>(100, std::max<long>(0, (t - 4000) / 120)));
+        s.folders = {{"zeroos-notes", "Notes", "/home/pi/Notes", "idle", 100, 0, ""},
+                     {"zeroos-documents", "Documents", "/home/pi/Documents", docs < 100 ? "syncing" : "idle", docs,
+                      docs < 100 ? (100 - docs) / 8 + 1 : 0, ""},
+                     {"zeroos-recordings", "Recordings", "/home/pi/Recordings", "idle", 100, 0, ""}};
+        if (!sync_desktop_removed_) s.devices.push_back({"DSK7Q2A-...", "desktop", t > 4000, 100});
+        if (sync_phone_ == 1) s.devices.push_back({"PHN3K5D-...", "phone", true, int(std::min<long>(100, (t - sync_phone_at_) / 80))});
+        if (sync_phone_ == 0 && t > 6000) s.requests.push_back({false, "PHN3K5D-...", "phone", "", ""});
+        return s;
+    }
+    void sync_start() override {
+        if (!sync_on_) sync_clock_.start();
+        sync_on_ = true;
+    }
+    void sync_stop() override { sync_on_ = false; }
+    bool sync_running() override { return sync_on_; }
+    bool sync_answer(const SyncRequest& r, bool accept) override {
+        std::printf("[mock-sync] %s %s\n", accept ? "accept" : "ignore", r.device_name.c_str());
+        sync_phone_ = accept ? 1 : 2;
+        sync_phone_at_ = sync_clock_.ms();
+        return true;
+    }
+    bool sync_add_device(const std::string& id, const std::string& name) override {
+        std::printf("[mock-sync] add %s %s\n", id.c_str(), name.c_str());
+        return id.size() == 63;
+    }
+    bool sync_remove_device(const std::string& id) override {
+        if (id.rfind("DSK", 0) == 0) sync_desktop_removed_ = true;
+        if (id.rfind("PHN", 0) == 0) sync_phone_ = 2;
+        return true;
+    }
+    void sync_rescan() override {}
+
     bool terminal_open(const std::string&) override { return false; }   // no real console here
     bool terminal_active() override { return false; }
 
@@ -288,6 +332,10 @@ private:
     bool dock_ = false;
     bool ts_on_ = false, ts_signed_in_ = false;
     PlayClock ts_clock_;
+    bool sync_on_ = false, sync_desktop_removed_ = false;
+    int sync_phone_ = 0;   // 0 asking, 1 accepted, 2 ignored
+    long sync_phone_at_ = 0;
+    PlayClock sync_clock_;
     CpuMode cpu_ = CpuMode::Balanced;
 };
 

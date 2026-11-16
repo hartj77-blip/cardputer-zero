@@ -33,6 +33,13 @@ install -m 0755 files/remote/terminal-session "${ROOTFS_DIR}/usr/lib/zeroos/term
 install -m 0644 files/remote/tmux.conf       "${ROOTFS_DIR}/etc/zeroos/tmux.conf"
 install -D -m 0644 files/remote/tailscaled-zeroos.conf \
                    "${ROOTFS_DIR}/etc/systemd/system/tailscaled.service.d/zeroos.conf"
+# Sync: Syncthing for Notes, Documents and Recordings (docs/SYNC.md).
+install -m 0755 files/sync/zeroos-sync       "${ROOTFS_DIR}/usr/bin/zeroos-sync"
+install -D -m 0644 files/sync/syncthing-zeroos.conf \
+                   "${ROOTFS_DIR}/etc/systemd/system/syncthing@.service.d/zeroos.conf"
+for d in Notes Documents Recordings; do
+    install -d -o 1000 -g 1000 "${ROOTFS_DIR}/home/${FIRST_USER_NAME}/$d" 2>/dev/null || true
+done
 # Console font for the Terminal app: Terminus 6x12 gives 53 x 14 on 320 x 170.
 sed -i -e 's/^FONTFACE=.*/FONTFACE="Terminus"/' -e 's/^FONTSIZE=.*/FONTSIZE="6x12"/' \
     "${ROOTFS_DIR}/etc/default/console-setup" 2>/dev/null || true

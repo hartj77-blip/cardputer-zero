@@ -530,7 +530,7 @@ private:
         if (!dock_cache_) return false;
         std::ostringstream cmd;
         cmd << "zeroos-dock open " << what;
-        if (!path.empty()) cmd << ' ' << std::quoted(path);
+        if (!path.empty()) cmd << ' ' << shell_quote(path);
         run(cmd.str());
         return true;
     }
@@ -594,8 +594,90 @@ private:
     }
     bool taildrop_send(const std::string& path, const std::string& peer) override {
         std::ostringstream cmd;
-        cmd << "tailscale file cp " << std::quoted(path) << ' ' << std::quoted(peer + ":") << " && echo ok";
+        cmd << "tailscale file cp " << shell_quote(path) << ' ' << shell_quote(peer + ":") << " && echo ok";
         return run(cmd.str()).find("ok") != std::string::npos;
+    }
+
+    // --- Sync: syncthing@pi.service, driven through /usr/bin/zeroos-sync
+    // (Syncthing's REST API). The helper is Python, so cache for 4 s.
+    SyncStatus sync() override {
+        time_t now = time(nullptr);
+        if (now - sync_at_ < 4 && sync_at_) return sync_cache_;
+        sync_at_ = now;
+        SyncStatus s;
+        s.installed = access("/usr/bin/syncthing", X_OK) == 0;
+        if (!s.installed) return sync_cache_ = s;
+        s.running = sync_running();
+        if (!s.running) return sync_cache_ = s;
+        std::istringstream in(run("zeroos-sync status 2>/dev/null"));
+        for (std::string line; std::getline(in, line);) {
+            std::vector<std::string> f;
+            std::istringstream ls(line);
+            for (std::string x; std::getline(ls, x, '\t');) f.push_back(x);
+            if (f.empty()) continue;
+            auto at = [&](size_t i) { return i < f.size() ? f[i] : std::string(); };
+            if (f[0] == "id") {
+                s.device_id = at(1);
+                s.ready = true;
+            } else if (f[0] == "folder") {
+                SyncFolder d;
+                d.id = at(1), d.label = at(2), d.path = at(3), d.state = at(4);
+                d.percent = std::atoi(at(5).c_str());
+                d.need_files = std::atoi(at(6).c_str());
+                d.error = at(7);
+                s.folders.push_back(d);
+            } else if (f[0] == "device") {
+                s.devices.push_back({at(1), at(2), at(3) == "1", std::atoi(at(4).c_str())});
+            } else if (f[0] == "request-device") {
+                s.requests.push_back({false, at(1), at(2), "", ""});
+            } else if (f[0] == "request-folder") {
+                s.requests.push_back({true, at(3), at(4), at(1), at(2)});
+            }
+        }
+        return sync_cache_ = s;
+    }
+    bool sync_running() override {
+        time_t now = time(nullptr);
+        if (now - sync_run_at_ >= 4 || !sync_run_at_) {
+            sync_run_at_ = now;
+            std::string st = run("systemctl is-active syncthing@${USER:-pi}.service");
+            sync_running_ = st.rfind("active", 0) == 0 || st.rfind("activating", 0) == 0;
+        }
+        return sync_running_;
+    }
+    void sync_start() override {
+        // The unit's ExecStartPost runs "zeroos-sync setup" (folders, options).
+        run("systemctl --no-block start syncthing@${USER:-pi}.service");
+        sync_at_ = sync_run_at_ = 0;
+    }
+    void sync_stop() override {
+        run("systemctl --no-block stop syncthing@${USER:-pi}.service");
+        sync_at_ = sync_run_at_ = 0;
+    }
+    bool sync_answer(const SyncRequest& r, bool accept) override {
+        std::ostringstream cmd;
+        if (r.is_folder)
+            cmd << "zeroos-sync " << (accept ? "accept-folder " : "ignore-folder ") << shell_quote(r.folder_id) << ' '
+                << shell_quote(r.folder_label) << ' ' << shell_quote(r.device_id);
+        else
+            cmd << "zeroos-sync " << (accept ? "add-device " : "ignore-device ") << shell_quote(r.device_id) << ' '
+                << shell_quote(r.device_name);
+        return sync_run(cmd.str());
+    }
+    bool sync_add_device(const std::string& id, const std::string& name) override {
+        std::ostringstream cmd;
+        cmd << "zeroos-sync add-device " << shell_quote(id) << ' ' << shell_quote(name);
+        return sync_run(cmd.str());
+    }
+    bool sync_remove_device(const std::string& id) override {
+        std::ostringstream cmd;
+        cmd << "zeroos-sync remove-device " << shell_quote(id);
+        return sync_run(cmd.str());
+    }
+    void sync_rescan() override { sync_run("zeroos-sync rescan"); }
+    bool sync_run(const std::string& cmd) {
+        sync_at_ = 0;
+        return run(cmd + " 2>/dev/null").find("ok") != std::string::npos;
     }
 
     // --- Terminal: zeroos-terminal.service runs tmux on tty3 and switches to it.
@@ -721,6 +803,9 @@ private:
 
     bool dock_cache_ = false;
     TsStatus ts_cache_;
+    SyncStatus sync_cache_;
+    time_t sync_at_ = 0, sync_run_at_ = 0;
+    bool sync_running_ = false;
     time_t ts_at_ = 0, term_at_ = 0;
     bool term_cache_ = false;
     long dock_calls_ = 0;

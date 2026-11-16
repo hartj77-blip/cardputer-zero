@@ -1,5 +1,9 @@
-// Notes: a plain-text editor. Saves to ~/notes.txt (or the file opened from
+// Notes: a plain-text editor. Saves to ~/Notes/notes.txt (or the file opened from
 // Files) automatically when you leave.
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include <cstdio>
 #include <fstream>
 #include <sstream>
 
@@ -19,8 +23,17 @@ class NotesApp : public App {
 public:
     ~NotesApp() override { save(); }
 
+    // ~/Notes/notes.txt (synced with the Notes folder). Older images used
+    // ~/notes.txt; move it the first time.
+    static std::string default_path() {
+        std::string dir = home_dir() + "/Notes", p = dir + "/notes.txt", old = home_dir() + "/notes.txt";
+        mkdir(dir.c_str(), 0755);
+        if (access(p.c_str(), F_OK) != 0 && access(old.c_str(), F_OK) == 0) rename(old.c_str(), p.c_str());
+        return p;
+    }
+
     void build(lv_obj_t* root) override {
-        path_ = g_pending_file.empty() ? home_dir() + "/notes.txt" : g_pending_file;
+        path_ = g_pending_file.empty() ? default_path() : g_pending_file;
         g_pending_file.clear();
 
         std::string name = path_.substr(path_.find_last_of('/') + 1);

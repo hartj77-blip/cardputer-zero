@@ -5,6 +5,7 @@
 #include "apps/common.h"
 #include "ui/power.h"
 #include "ui/remote.h"
+#include "ui/sync.h"
 
 namespace zs {
 namespace {
@@ -68,6 +69,10 @@ public:
                       if (v == 1) hal().tailscale_start();
                       if (v == 2) hal().tailscale_stop();
                   });
+
+        int sm = sync_mode() == "always" ? 1 : sync_mode() == "manual" ? 2 : 0;
+        cycle_row(col, LV_SYMBOL_LOOP "  Sync", {{"While charging", 0}, {"Always on", 1}, {"When asked", 2}}, sm,
+                  [](int v) { set_sync_mode(v == 1 ? "always" : v == 2 ? "manual" : "charging"); });
 
         button_row(col, LV_SYMBOL_WIFI "  Wi-Fi networks", [](lv_event_t*) { shell_open_app("wifi"); });
         button_row(col, LV_SYMBOL_LIST "  About this device", [](lv_event_t*) { shell_open_app("sysmon"); });

@@ -81,6 +81,39 @@ struct TsStatus {
     std::vector<TsPeer> peers;   // online first
 };
 
+// Sync: Syncthing keeps Notes, Documents and Recordings the same on your
+// other computers (see docs/SYNC.md).
+struct SyncFolder {
+    std::string id, label, path;
+    std::string state;      // idle, scanning, syncing, error, ...
+    int percent = 100;      // how much of the latest version we have
+    int need_files = 0;
+    std::string error;
+};
+
+struct SyncDevice {
+    std::string id, name;
+    bool connected = false;
+    int percent = 100;      // how up to date that device is with us
+};
+
+// Someone asked to connect, or offered us a folder.
+struct SyncRequest {
+    bool is_folder = false;
+    std::string device_id, device_name;
+    std::string folder_id, folder_label;   // folder offers only
+};
+
+struct SyncStatus {
+    bool installed = false;
+    bool running = false;   // the service is up
+    bool ready = false;     // and answering (set up, folders known)
+    std::string device_id;  // ours: give this to your other devices
+    std::vector<SyncFolder> folders;
+    std::vector<SyncDevice> devices;
+    std::vector<SyncRequest> requests;
+};
+
 struct IrCode {
     std::string name;
     std::string protocol;   // nec, rc5, sony12, raw...
@@ -186,6 +219,18 @@ public:
     virtual void tailscale_stop() = 0;
     virtual void tailscale_logout() = 0;
     virtual bool taildrop_send(const std::string& path, const std::string& peer) = 0;
+
+    // Sync (Syncthing). start/stop the service; accept or ignore a request
+    // (accepting a device shares Notes, Documents and Recordings with it; an
+    // offered folder goes to ~/Sync/<name>); add a device by its ID.
+    virtual SyncStatus sync() = 0;          // slow on the device: a few calls a minute
+    virtual bool sync_running() = 0;        // cheap: is the service up
+    virtual void sync_start() = 0;
+    virtual void sync_stop() = 0;
+    virtual bool sync_answer(const SyncRequest& r, bool accept) = 0;
+    virtual bool sync_add_device(const std::string& id, const std::string& name) = 0;
+    virtual bool sync_remove_device(const std::string& id) = 0;
+    virtual void sync_rescan() = 0;
 
     // Terminal on the built-in screen: hands the screen and keyboard to a
     // Linux console running tmux (sessions survive going back). command ""

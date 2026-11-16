@@ -6,6 +6,7 @@
 #include "platform/platform.h"
 #include "ui/power.h"
 #include "ui/remote.h"
+#include "ui/sync.h"
 #include "ui/theme.h"
 
 namespace zs {
@@ -151,6 +152,7 @@ void Shell::update_statusbar() {
     else if (h.playback().playing) icons += LV_SYMBOL_AUDIO "  ";
     if (n.usb_gadget) icons += LV_SYMBOL_USB "  ";
     if (!n.tailscale_ip.empty()) icons += "TS  ";
+    if (sync_running_cached()) icons += LV_SYMBOL_LOOP "  ";
     if (n.bt_enabled) icons += LV_SYMBOL_BLUETOOTH "  ";
     if (n.wifi_connected) icons += LV_SYMBOL_WIFI "  ";
     if (b.charging) icons += LV_SYMBOL_CHARGE " ";
@@ -179,6 +181,7 @@ void Shell::tick_cb(lv_timer_t* t) {
     hal().poll();
     power().tick(lv_tick_get());
     remote_tick(lv_tick_get());
+    sync_tick(lv_tick_get());
     static int n = 0;
     // Terminal closed (exit, or tmux detach with Alt+`): take the screen back.
     if (s->handoff_ && lv_tick_elaps(s->handoff_since_) > 1500 && !hal().terminal_active()) {

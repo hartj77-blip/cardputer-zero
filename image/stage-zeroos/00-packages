@@ -30,3 +30,5 @@ curl
 tmux
 mosh
 freerdp3-wayland
+syncthing
+python3
