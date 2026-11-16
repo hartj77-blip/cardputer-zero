@@ -1,0 +1,88 @@
+name: Build image
+
+# Builds the flashable ZeroOS .img.xz (about 1.5-3 hours: an x86 runner builds
+# the arm64 system under qemu). It runs on pull requests that change the image,
+# and by hand from the Actions tab.
+on:
+  pull_request:
+    paths:
+      - image/**
+      - .github/workflows/image.yml
+  workflow_dispatch:
+    inputs:
+      wifi_country:
+        description: Wi-Fi country code (regulatory domain)
+        default: US
+        required: true
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # git describe for the version string
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+                      /opt/hostedtoolcache /usr/share/swift /usr/local/share/boost
+          sudo docker image prune -af >/dev/null || true
+          df -h /
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++-aarch64-linux-gnu \
+            coreutils quilt parted debootstrap zerofree zip dosfstools libarchive-tools \
+            libcap2-bin grep rsync xz-utils file git curl bc gpg pigz xxd arch-test \
+            qemu-user-static kmod binfmt-support e2fsprogs
+          sudo update-binfmts --enable qemu-aarch64 || true
+          ls /proc/sys/fs/binfmt_misc/
+      - name: Check package names (fast fail, ~3 min)
+        # A trixie arm64 container with Raspberry Pi's repository resolves our
+        # package list before the hour-long base build starts.
+        run: |
+          pkgs=$(grep -v '^#' image/stage-zeroos/*-packages | tr '\n' ' ')
+          # The same Raspberry Pi archive key pi-gen installs (the old .gpg.key
+          # on the archive is SHA-1 signed and rejected by trixie's apt).
+          curl -fsSL -o /tmp/rpi.pgp https://raw.githubusercontent.com/CardputerZero/pi-gen/e3b4e323782a59a426b92356248f5bc09a098be1/stage0/00-configure-apt/files/raspberrypi-archive-keyring.pgp
+          docker run --rm --platform linux/arm64 -v /tmp/rpi.pgp:/usr/share/keyrings/rpi.gpg:ro debian:trixie sh -euc "
+            apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates >/dev/null
+            echo 'deb [signed-by=/usr/share/keyrings/rpi.gpg] http://archive.raspberrypi.com/debian trixie main' > /etc/apt/sources.list.d/rpi.list
+            curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg -o /usr/share/keyrings/tailscale-archive-keyring.gpg
+            curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.tailscale-keyring.list -o /etc/apt/sources.list.d/tailscale.list
+            curl -fsSL https://download.opensuse.org/repositories/network:/Meshtastic:/beta/Debian_13/Release.key -o /usr/share/keyrings/meshtastic.asc
+            echo 'deb [signed-by=/usr/share/keyrings/meshtastic.asc] http://download.opensuse.org/repositories/network:/Meshtastic:/beta/Debian_13/ /' > /etc/apt/sources.list.d/meshtastic.list
+            apt-get update -qq
+            apt-get install -s $pkgs tailscale meshtasticd > /tmp/plan.txt
+            grep -c '^Inst' /tmp/plan.txt"
+      - name: Build ZeroShell (arm64)
+        run: |
+          cmake -S shell -B build/device -DZS_BACKEND=device \
+            -DCMAKE_TOOLCHAIN_FILE=$PWD/cmake/aarch64-linux-gnu.cmake
+          cmake --build build/device -j"$(nproc)"
+          aarch64-linux-gnu-strip build/device/zeroshell
+      - name: Build image
+        env:
+          WIFI_COUNTRY: ${{ inputs.wifi_country || 'US' }}
+          PIGEN_NATIVE: 1
+        run: image/build.sh build/device/zeroshell
+      - name: Image contents check
+        run: |
+          ls -la build/image/pi-gen/deploy/
+          sudo tail -40 build/image/pi-gen/deploy/build.log || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zeroos-image
+          path: |
+            build/image/pi-gen/deploy/*.img.xz
+            build/image/pi-gen/deploy/*.info
+            build/image/pi-gen/deploy/build.log
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: warn

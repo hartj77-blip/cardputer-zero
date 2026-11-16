@@ -1,0 +1,23 @@
+# The Terminal app: tmux on the Linux console (tty3), on the built-in screen.
+# ZeroShell starts this and steps aside; when tmux detaches (Alt+`) or the
+# last shell exits, we switch back to ZeroShell on tty1. tmux itself keeps
+# running (KillMode=process), so sessions and SSH connections survive.
+[Unit]
+Description=ZeroOS terminal on the built-in screen
+
+[Service]
+User=pi
+PAMName=login
+TTYPath=/dev/tty3
+TTYReset=yes
+TTYVHangup=yes
+StandardInput=tty-force
+StandardOutput=tty
+StandardError=journal
+UtmpIdentifier=tty3
+UtmpMode=user
+ExecStartPre=+/bin/chvt 3
+ExecStart=/usr/lib/zeroos/terminal-session
+ExecStopPost=+/bin/chvt 1
+KillMode=process
+Restart=no

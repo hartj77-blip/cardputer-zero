@@ -1,0 +1,6 @@
+# Backlight and keyboard LEDs writable by the video group (ZeroShell runs as pi).
+SUBSYSTEM=="backlight", RUN+="/bin/chgrp video /sys%p/brightness", RUN+="/bin/chmod g+w /sys%p/brightness"
+SUBSYSTEM=="leds", RUN+="/bin/chgrp video /sys%p/brightness", RUN+="/bin/chmod g+w /sys%p/brightness"
+# IR transmit/receive for the IR Remote app.
+SUBSYSTEM=="lirc", GROUP="video", MODE="0660"
+SUBSYSTEM=="rc", RUN+="/bin/chgrp -R video /sys%p", RUN+="/bin/chmod -R g+w /sys%p"

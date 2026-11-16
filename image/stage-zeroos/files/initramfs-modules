@@ -1,0 +1,8 @@
+# ZeroOS: the LCD driver must be in the initramfs or the panel stays blank
+# without Plymouth (reported by early owners).
+spi_bcm2835
+drm
+drm_kms_helper
+drm_mipi_dbi
+panel_mipi_dbi
+vc4

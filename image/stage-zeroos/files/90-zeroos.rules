@@ -1,0 +1,19 @@
+// Let the UI user manage Wi-Fi/Bluetooth and power without a login session.
+polkit.addRule(function(action, subject) {
+    if (subject.user != "pi") return;
+    if (action.id.indexOf("org.freedesktop.NetworkManager.") == 0 ||
+        action.id == "org.freedesktop.login1.power-off" ||
+        action.id == "org.freedesktop.login1.power-off-multiple-sessions" ||
+        action.id == "org.freedesktop.login1.reboot" ||
+        action.id == "org.freedesktop.login1.reboot-multiple-sessions") {
+        return polkit.Result.YES;
+    }
+    // Dock mode: ZeroShell starts and stops the desktop on the HDMI monitor.
+    // Terminal app, Tailscale ("when needed") and Sync are started the same way.
+    var units = ["zeroos-dock.service", "zeroos-terminal.service", "tailscaled.service",
+                 "syncthing@pi.service", "meshtasticd.service"];
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        units.indexOf(action.lookup("unit")) >= 0) {
+        return polkit.Result.YES;
+    }
+});

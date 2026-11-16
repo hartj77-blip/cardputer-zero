@@ -1,0 +1,14 @@
+#!/bin/sh
+# Chromium tuned for 512 MB of RAM: at most two page processes, a small cache
+# in RAM, low-end mode (smaller tiles and caches). earlyoom closes it first if
+# memory runs out, before anything else.
+exec chromium \
+    --ozone-platform=wayland \
+    --enable-low-end-device-mode \
+    --renderer-process-limit=2 \
+    --process-per-site \
+    --disk-cache-dir=/tmp/chromium-cache --disk-cache-size=33554432 \
+    --js-flags=--max-old-space-size=192 \
+    --disable-features=Translate,MediaRouter,OptimizationHints,BackForwardCache \
+    --no-first-run --no-default-browser-check --password-store=basic \
+    "$@"

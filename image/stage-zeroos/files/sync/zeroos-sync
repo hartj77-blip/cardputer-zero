@@ -1,0 +1,250 @@
+#!/usr/bin/python3 -I
+"""ZeroOS sync helper: talks to the local Syncthing for ZeroShell.
+
+  zeroos-sync status                  one line per item, tab separated (below)
+  zeroos-sync setup                   options + the ZeroOS folders (idempotent)
+  zeroos-sync add-device ID [NAME]    trust a device, share the ZeroOS folders
+  zeroos-sync remove-device ID
+  zeroos-sync ignore-device ID [NAME]
+  zeroos-sync accept-folder FOLDER LABEL DEVICE   into ~/Sync/LABEL
+  zeroos-sync ignore-folder FOLDER LABEL DEVICE
+  zeroos-sync rescan
+
+status prints:
+  id      MYDEVICEID
+  folder  ID LABEL PATH STATE PERCENT NEEDFILES ERROR
+  device  ID NAME CONNECTED(0/1) PERCENT
+  request-device  ID NAME
+  request-folder  FOLDERID LABEL DEVICEID DEVICENAME
+and exits 2 if Syncthing isn't answering.
+
+Runs as pi. The API key comes from Syncthing's own config.xml.
+"""
+import json
+import os
+import re
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+HOME = os.path.expanduser("~")
+API = "http://127.0.0.1:8384"
+
+# id, label, path: what ZeroOS keeps in sync.
+FOLDERS = [
+    ("zeroos-notes", "Notes", HOME + "/Notes"),
+    ("zeroos-documents", "Documents", HOME + "/Documents"),
+    ("zeroos-recordings", "Recordings", HOME + "/Recordings"),
+]
+
+
+def api_key():
+    for d in (os.environ.get("XDG_STATE_HOME", HOME + "/.local/state") + "/syncthing",
+              os.environ.get("XDG_CONFIG_HOME", HOME + "/.config") + "/syncthing"):
+        try:
+            with open(d + "/config.xml") as f:
+                m = re.search(r"<apikey>([^<]+)</apikey>", f.read())
+                if m:
+                    return m.group(1)
+        except OSError:
+            pass
+    return ""
+
+
+KEY = api_key()
+
+
+def call(method, path, body=None, **params):
+    url = API + path
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, method=method,
+                                 headers={"X-API-Key": KEY, "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        raw = r.read()
+    return json.loads(raw) if raw.strip() else None
+
+
+def q(s):
+    return urllib.parse.quote(s, safe="")
+
+
+def get(path, **params):
+    return call("GET", path, **params)
+
+
+def wait_ready(seconds):
+    global KEY
+    end = time.time() + seconds
+    while time.time() < end:
+        KEY = KEY or api_key()
+        try:
+            return get("/rest/system/status")["myID"]
+        except (OSError, urllib.error.URLError, ValueError, KeyError, TypeError):
+            time.sleep(1)
+    return None
+
+
+def clean(s):
+    return str(s).replace("\t", " ").replace("\n", " ")
+
+
+def out(*fields):
+    print("\t".join(clean(f) for f in fields))
+
+
+def status():
+    try:
+        me = get("/rest/system/status")["myID"]
+        cfg = get("/rest/config")
+    except (OSError, urllib.error.URLError, ValueError, KeyError, TypeError):
+        sys.exit(2)
+    out("id", me)
+    for f in cfg.get("folders", []):
+        try:
+            st = get("/rest/db/status", folder=f["id"])
+        except (OSError, urllib.error.URLError, ValueError):
+            st = {}
+        total, need = st.get("globalBytes", 0), st.get("needBytes", 0)
+        pct = 100 if total <= 0 else int(100 * (total - need) / total)
+        state = "paused" if f.get("paused") else st.get("state", "unknown")
+        out("folder", f["id"], f.get("label") or f["id"], f.get("path", ""), state, pct,
+            st.get("needFiles", 0), st.get("error", ""))
+    try:
+        conns = get("/rest/system/connections").get("connections", {})
+    except (OSError, urllib.error.URLError, ValueError):
+        conns = {}
+    for d in cfg.get("devices", []):
+        if d["deviceID"] == me:
+            continue
+        connected = conns.get(d["deviceID"], {}).get("connected", False)
+        pct = 100
+        if connected:
+            try:
+                pct = int(get("/rest/db/completion", device=d["deviceID"]).get("completion", 100))
+            except (OSError, urllib.error.URLError, ValueError):
+                pass
+        out("device", d["deviceID"], d.get("name") or d["deviceID"][:7], int(connected), pct)
+    names = {d["deviceID"]: d.get("name") or d["deviceID"][:7] for d in cfg.get("devices", [])}
+    try:
+        for dev, info in (get("/rest/cluster/pending/devices") or {}).items():
+            out("request-device", dev, info.get("name") or dev[:7])
+        for fid, info in (get("/rest/cluster/pending/folders") or {}).items():
+            for dev, offer in info.get("offeredBy", {}).items():
+                out("request-folder", fid, offer.get("label") or fid, dev, names.get(dev, dev[:7]))
+    except (OSError, urllib.error.URLError, ValueError, AttributeError):
+        pass
+
+
+def setup():
+    me = wait_ready(60)
+    if not me:
+        sys.exit("syncthing isn't answering")
+    # Light on a 512 MB device: one folder at a time, low priority, no
+    # usage reports or crash reports, no self-upgrade (apt does that).
+    call("PATCH", "/rest/config/options", {
+        "urAccepted": -1,
+        "crashReportingEnabled": False,
+        "autoUpgradeIntervalH": 0,
+        "setLowPriority": True,
+        "maxFolderConcurrency": 1,
+        "startBrowser": False,
+    })
+    have = {f["id"] for f in get("/rest/config/folders")}
+    for fid, label, path in FOLDERS:
+        os.makedirs(path, exist_ok=True)
+        if fid in have:
+            continue
+        call("PUT", "/rest/config/folders/" + q(fid), {
+            "id": fid, "label": label, "path": path, "type": "sendreceive",
+            "fsWatcherEnabled": True, "fsWatcherDelayS": 10, "rescanIntervalS": 3600,
+            "devices": [{"deviceID": me}],
+            # Deleted or overwritten files are kept for 14 days in .stversions.
+            "versioning": {"type": "trashcan", "params": {"cleanoutDays": "14"}},
+        })
+
+
+def share_with(dev):
+    for fid, _, _ in FOLDERS:
+        try:
+            f = get("/rest/config/folders/" + q(fid))
+        except urllib.error.HTTPError:
+            continue
+        if all(d["deviceID"] != dev for d in f.get("devices", [])):
+            f["devices"].append({"deviceID": dev})
+            call("PUT", "/rest/config/folders/" + q(fid), f)
+
+
+def add_device(dev, name=""):
+    dev = dev.strip().upper()
+    if not re.fullmatch(r"[A-Z2-7]{7}(-[A-Z2-7]{7}){7}", dev):
+        sys.exit("not a Syncthing device ID")
+    call("PUT", "/rest/config/devices/" + q(dev), {
+        "deviceID": dev, "name": name, "addresses": ["dynamic"], "autoAcceptFolders": False,
+    })
+    share_with(dev)
+
+
+def ignore_device(dev, name=""):
+    cfg = get("/rest/config")
+    ign = cfg.setdefault("remoteIgnoredDevices", [])
+    if all(d.get("deviceID") != dev for d in ign):
+        ign.append({"deviceID": dev, "name": name, "address": "",
+                    "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+        call("PUT", "/rest/config", cfg)
+    call("DELETE", "/rest/cluster/pending/devices", device=dev)
+
+
+def accept_folder(fid, label, dev):
+    me = get("/rest/system/status")["myID"]
+    safe = re.sub(r"[^\w .-]", "_", label).strip(" .") or fid
+    path = HOME + "/Sync/" + safe
+    os.makedirs(path, exist_ok=True)
+    call("PUT", "/rest/config/folders/" + q(fid), {
+        "id": fid, "label": label, "path": path, "type": "sendreceive",
+        "fsWatcherEnabled": True, "fsWatcherDelayS": 10, "rescanIntervalS": 3600,
+        "devices": [{"deviceID": me}, {"deviceID": dev}],
+        "versioning": {"type": "trashcan", "params": {"cleanoutDays": "14"}},
+    })
+
+
+def ignore_folder(fid, label, dev):
+    d = get("/rest/config/devices/" + q(dev))
+    if all(f.get("id") != fid for f in d.get("ignoredFolders", [])):
+        d.setdefault("ignoredFolders", []).append({"id": fid, "label": label})
+        call("PUT", "/rest/config/devices/" + q(dev), d)
+    call("DELETE", "/rest/cluster/pending/folders", folder=fid, device=dev)
+
+
+def main(argv):
+    cmd, args = (argv[0], argv[1:]) if argv else ("status", [])
+    try:
+        if cmd == "status":
+            status()
+        elif cmd == "setup":
+            setup()
+        elif cmd == "add-device" and args:
+            add_device(args[0], args[1] if len(args) > 1 else "")
+        elif cmd == "remove-device" and args:
+            call("DELETE", "/rest/config/devices/" + q(args[0]))
+        elif cmd == "ignore-device" and args:
+            ignore_device(args[0], args[1] if len(args) > 1 else "")
+        elif cmd == "accept-folder" and len(args) == 3:
+            accept_folder(*args)
+        elif cmd == "ignore-folder" and len(args) == 3:
+            ignore_folder(*args)
+        elif cmd == "rescan":
+            call("POST", "/rest/db/scan")
+        else:
+            sys.exit(__doc__)
+    except (OSError, urllib.error.URLError) as e:
+        sys.exit("syncthing: %s" % e)
+    if cmd != "status":
+        print("ok")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

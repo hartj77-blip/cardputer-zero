@@ -1,0 +1,13 @@
+# ZeroOS: cloud-init applies the imager's first-boot settings (Wi-Fi, user,
+# SSH key). After that one boot it only costs time and RAM, so turn it off.
+[Unit]
+Description=Disable cloud-init after first boot
+After=cloud-final.service
+ConditionPathExists=!/etc/cloud/cloud-init.disabled
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/touch /etc/cloud/cloud-init.disabled
+
+[Install]
+WantedBy=multi-user.target

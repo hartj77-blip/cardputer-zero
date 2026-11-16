@@ -1,0 +1,17 @@
+#!/bin/sh
+# Video player for Dock mode. H.264 is decoded by the VideoCore hardware
+# (V4L2 M2M); other formats fall back to the CPU. With no file given, pick
+# one from ~/Videos.
+#   zeroos-video [FILE|URL]
+if [ $# -eq 0 ]; then
+    dir="$HOME/Videos"
+    [ -d "$dir" ] || dir="$HOME"
+    f=$(cd "$dir" && find . -maxdepth 3 -type f \( -iname '*.mp4' -o -iname '*.mkv' -o -iname '*.webm' \
+            -o -iname '*.mov' -o -iname '*.avi' -o -iname '*.m4v' \) | sed 's|^\./||' | sort |
+        fuzzel --dmenu --prompt "Video: ")
+    [ -n "$f" ] || exit 0
+    set -- "$dir/$f"
+fi
+exec mpv --hwdec=v4l2m2m-copy --hwdec-codecs=h264 \
+    --cache=yes --demuxer-max-bytes=32MiB --demuxer-max-back-bytes=8MiB \
+    --vd-lavc-threads=4 --keep-open=no --force-window=yes "$@"

@@ -1,0 +1,25 @@
+# ZeroOS: M5Stack Cap LoRa-1262 on the CardputerZero's EXT port
+# (docs/EXPANSION.md). SX1262 on SPI0 CE1 (GPIO 7, /dev/spidev0.1); pins as
+# M5's pin map and trail-mate's CardputerZero port use them. Confirm on
+# hardware.
+Lora:
+  Module: sx1262
+  spidev: spidev0.1
+  Reset: 26
+  Busy: 22
+  IRQ: 23
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: true
+
+# Position from gpsd, which shares the GPS with ZeroShell's GPS app.
+GPS:
+  GpsdHost: localhost
+  GpsdPort: 2947
+
+# The Meshtastic web client, for chatting from a phone or the Dock browser.
+Webserver:
+  Port: 9443
+  RootPath: /usr/share/meshtasticd/web
+
+General:
+  MaxNodes: 100

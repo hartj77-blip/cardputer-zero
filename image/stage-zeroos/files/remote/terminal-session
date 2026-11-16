@@ -1,0 +1,19 @@
+#!/bin/sh
+# Runs on tty3 for the Terminal app: attach to tmux, optionally running a
+# command (e.g. "ssh desktop") in a new window first.
+cd "$HOME" || exit 1
+export TERM=linux
+cmdfile="$HOME/.cache/zeroos/terminal-cmd"
+cmd=$(cat "$cmdfile" 2>/dev/null); rm -f "$cmdfile"
+cmd=$(printf '%s' "$cmd" | sed 's/^ *//; s/ *$//')
+conf=/etc/zeroos/tmux.conf
+if [ -n "$cmd" ]; then
+    # Keep the window open after ssh ends, so errors stay readable.
+    run="$cmd; echo; printf 'Press Enter to close'; read _"
+    if tmux -f "$conf" has-session -t main 2>/dev/null; then
+        tmux -f "$conf" new-window -t main -n "${cmd##* }" "$run"
+    else
+        tmux -f "$conf" new-session -d -s main -n "${cmd##* }" "$run"
+    fi
+fi
+exec tmux -f "$conf" new-session -A -s main

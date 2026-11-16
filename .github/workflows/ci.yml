@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  screenshots:
+    name: Simulator build + screenshots
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libsdl2-dev python3-pil
+      - name: Build SDL simulator (compile check)
+        run: cmake -S shell -B build/sim -DZS_BACKEND=sim && cmake --build build/sim -j"$(nproc)"
+      - name: Build headless
+        run: cmake -S shell -B build/headless -DZS_BACKEND=headless && cmake --build build/headless -j"$(nproc)"
+      - name: Render every screen (fails if any app crashes)
+        run: shell/tools/screenshots.sh build/headless/zeroshell build/screenshots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: build/screenshots
+
+  web:
+    name: Browser simulator (WebAssembly)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.74
+      - name: Build
+        run: web/build.sh build/zeroos-simulator.html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zeroos-simulator-html
+          path: build/zeroos-simulator.html
+
+  device:
+    name: Device build (arm64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cross compiler
+        run: sudo apt-get update && sudo apt-get install -y cmake g++-aarch64-linux-gnu
+      - name: Build
+        run: |
+          cmake -S shell -B build/device -DZS_BACKEND=device \
+            -DCMAKE_TOOLCHAIN_FILE=$PWD/cmake/aarch64-linux-gnu.cmake
+          cmake --build build/device -j"$(nproc)"
+          aarch64-linux-gnu-strip build/device/zeroshell
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zeroshell-arm64
+          path: build/device/zeroshell

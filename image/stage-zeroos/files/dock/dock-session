@@ -1,0 +1,17 @@
+#!/bin/sh
+# Starts labwc on the HDMI output only. The built-in LCD is a separate DRM
+# card (mipi-dbi) that ZeroShell draws to, so wlroots must not open it.
+card=""
+for c in /sys/class/drm/card[0-9]*; do
+    case "${c##*/}" in *-*) continue ;; esac
+    if ls -d "$c"-HDMI-A-* >/dev/null 2>&1; then card="/dev/dri/${c##*/}"; break; fi
+done
+if [ -z "$card" ]; then
+    echo "dock-session: no DRM card with an HDMI connector" >&2
+    exit 1
+fi
+export WLR_DRM_DEVICES="$card"
+export XDG_CURRENT_DESKTOP=labwc:wlroots
+export XDG_SESSION_TYPE=wayland
+export MOZ_ENABLE_WAYLAND=1
+exec labwc -C /etc/zeroos/dock
