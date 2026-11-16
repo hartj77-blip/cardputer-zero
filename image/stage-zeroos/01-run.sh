@@ -40,6 +40,12 @@ install -D -m 0644 files/sync/syncthing-zeroos.conf \
 for d in Notes Documents Recordings; do
     install -d -o 1000 -g 1000 "${ROOTFS_DIR}/home/${FIRST_USER_NAME}/$d" 2>/dev/null || true
 done
+# Expansion: GPS on the UART (G14/G15, EXT and Grove), LoRa on SPI0 CE1.
+install -m 0644 files/expansion/gpsd.default "${ROOTFS_DIR}/etc/default/gpsd"
+install -D -m 0644 files/expansion/meshtasticd-cap-lora-1262.yaml \
+                   "${ROOTFS_DIR}/etc/meshtasticd/config.d/zeroos-cap-lora-1262.yaml"
+install -D -m 0644 files/expansion/meshtasticd-zeroos.conf \
+                   "${ROOTFS_DIR}/etc/systemd/system/meshtasticd.service.d/zeroos.conf"
 # Console font for the Terminal app: Terminus 6x12 gives 53 x 14 on 320 x 170.
 sed -i -e 's/^FONTFACE=.*/FONTFACE="Terminus"/' -e 's/^FONTSIZE=.*/FONTSIZE="6x12"/' \
     "${ROOTFS_DIR}/etc/default/console-setup" 2>/dev/null || true
@@ -56,6 +62,9 @@ grep -q '^gpu_mem=' "$CONFIG_TXT" && sed -i 's/^gpu_mem=.*/gpu_mem=32/' "$CONFIG
 # Wi-Fi regulatory domain (M5 ships AE); quiet boot without Plymouth.
 sed -i -e 's/cfg80211.ieee80211_regdom=[A-Z]*//' -e 's/ splash//' -e 's/ plymouth.ignore-serial-consoles//' "$CMDLINE_TXT"
 sed -i '1 s/$/ cfg80211.ieee80211_regdom=@WIFI_COUNTRY@/' "$CMDLINE_TXT"
+# The UART belongs to GPS modules, not a serial console.
+sed -i -e 's/console=serial0,[0-9]* *//' -e 's/console=ttyS0,[0-9]* *//' -e 's/console=ttyAMA0,[0-9]* *//' "$CMDLINE_TXT"
+grep -q '^enable_uart=' "$CONFIG_TXT" && sed -i 's/^enable_uart=.*/enable_uart=1/' "$CONFIG_TXT" || echo 'enable_uart=1' >> "$CONFIG_TXT"
 
 # Keyboard symbol layer system-wide, not only under M5's launcher (owner report).
 KMAP=/usr/share/keymaps/tca8418_keypad_m5stack_keymap.map
@@ -84,6 +93,18 @@ apt-get install -y tailscale
 sed -i 's/^FLAGS=.*/FLAGS="--no-logs-no-support"/' /etc/default/tailscaled
 systemctl disable tailscaled.service
 systemctl enable zeroos-taildrop.service
+# Meshtastic for the Cap LoRa-1262 (docs/EXPANSION.md), also off at boot.
+curl -fsSL https://download.opensuse.org/repositories/network:/Meshtastic:/beta/Debian_13/Release.key \
+    -o /usr/share/keyrings/meshtastic.asc
+echo 'deb [signed-by=/usr/share/keyrings/meshtastic.asc] http://download.opensuse.org/repositories/network:/Meshtastic:/beta/Debian_13/ /' \
+    > /etc/apt/sources.list.d/meshtastic.list
+apt-get update
+apt-get install -y meshtasticd
+systemctl disable meshtasticd.service
+# GPS: gpsd starts when a client connects (gpsd.socket) and only reads the
+# receiver while someone watches.
+systemctl enable gpsd.socket
+systemctl disable gpsd.service 2>/dev/null || true
 # arm64 only: M5 enables armhf too, which doubles apt indexes (owner report).
 dpkg --remove-architecture armhf 2>/dev/null || true
 # nexmon shadows the onboard Wi-Fi driver and has no BCM43439 support.
@@ -118,7 +139,7 @@ disable_if_present apt-daily.timer apt-daily-upgrade.timer man-db.timer e2scrub_
 systemctl --global disable rpi-connect.service rpi-connect-wayvnc.service 2>/dev/null || true
 
 groupadd -f spi   # /dev/spidev* stays root-only without it (owner report)
-for g in video input audio netdev i2c gpio spi; do
+for g in video input audio netdev i2c gpio spi dialout adm; do   # adm: read service logs
     getent group "$g" >/dev/null && usermod -aG "$g" pi
 done
 update-initramfs -u -k all || true

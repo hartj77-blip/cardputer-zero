@@ -32,3 +32,5 @@ mosh
 freerdp3-wayland
 syncthing
 python3
+gpsd
+gpsd-clients

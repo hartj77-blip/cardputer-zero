@@ -17,6 +17,9 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <sys/sysinfo.h>
@@ -25,6 +28,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <cmath>
 #include <ctime>
 #include <cstdio>
@@ -174,6 +178,7 @@ std::string find_power_supply() {
 class LinuxHal : public Hal {
 public:
     ~LinuxHal() override {
+        gps_stop();
         stop();
         record_stop();
     }
@@ -186,9 +191,18 @@ public:
             backlight_ = "/sys/class/backlight/" + n + "/";
             break;
         }
+        // Expansion 5 V: LED-class supplies (ext_5v_out on M5's image; the
+        // Grove port's, if the kernel exposes it the same way).
+        for (auto& n : list_dir("/sys/class/leds/")) {
+            std::string l = n;
+            std::transform(l.begin(), l.end(), l.begin(), ::tolower);
+            if (l.find("5v") != std::string::npos) ext5v_.push_back("/sys/class/leds/" + n + "/");
+        }
     }
 
     void poll() override {
+        // Nobody has asked for the position for 5 s: let gpsd go idle.
+        if (gps_fd_ >= 0 && time(nullptr) - gps_want_ > 5) gps_stop();
         // Battery and IMU are cheap sysfs reads; cache them per poll.
         bat_cache_ = read_battery();
         imu_cache_ = read_imu();
@@ -680,6 +694,141 @@ private:
         return run(cmd + " 2>/dev/null").find("ok") != std::string::npos;
     }
 
+    // --- Expansion 5 V
+    bool ext_power() override { return !ext5v_.empty() && read_long(ext5v_[0] + "brightness") > 0; }
+    void set_ext_power(bool on) override {
+        for (auto& d : ext5v_) {
+            long max = read_long(d + "max_brightness", 1);
+            write_str(d + "brightness", on ? std::to_string(max > 0 ? max : 1) : "0");
+        }
+    }
+
+    // --- GPS through gpsd (socket-activated: it starts when we connect and
+    // stops reading the receiver when we stop watching).
+    GpsFix gps() override {
+        time_t now = time(nullptr);
+        gps_want_ = now;
+        if (gps_fd_ < 0 && now - gps_try_ >= 3) {
+            gps_try_ = now;
+            gps_fd_ = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+            sockaddr_in a{};
+            a.sin_family = AF_INET;
+            a.sin_port = htons(2947);
+            a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            if (gps_fd_ >= 0 && connect(gps_fd_, reinterpret_cast<sockaddr*>(&a), sizeof a) < 0 &&
+                errno != EINPROGRESS) {
+                close(gps_fd_);
+                gps_fd_ = -1;
+            }
+            gps_sent_ = false;
+            gps_buf_.clear();
+        }
+        if (gps_fd_ < 0) return gps_;
+        if (!gps_sent_) {
+            static const char kWatch[] = "?WATCH={\"enable\":true,\"json\":true};\n";
+            if (send(gps_fd_, kWatch, sizeof kWatch - 1, MSG_NOSIGNAL) > 0) gps_sent_ = true;
+        }
+        char buf[4096];
+        for (;;) {
+            ssize_t n = recv(gps_fd_, buf, sizeof buf, MSG_DONTWAIT);
+            if (n > 0) {
+                gps_buf_.append(buf, size_t(n));
+                continue;
+            }
+            if (n == 0 || (errno != EAGAIN && errno != EWOULDBLOCK && errno != ENOTCONN)) {
+                close(gps_fd_);   // gpsd went away; try again in 3 s
+                gps_fd_ = -1;
+                gps_ = GpsFix{};
+            }
+            break;
+        }
+        size_t nl;
+        while ((nl = gps_buf_.find('\n')) != std::string::npos) {
+            std::string line = gps_buf_.substr(0, nl);
+            gps_buf_.erase(0, nl + 1);
+            gps_line(line);
+        }
+        if (gps_buf_.size() > 65536) gps_buf_.clear();
+        return gps_;
+    }
+    void gps_stop() override {
+        if (gps_fd_ < 0) return;
+        static const char kOff[] = "?WATCH={\"enable\":false};\n";
+        if (send(gps_fd_, kOff, sizeof kOff - 1, MSG_NOSIGNAL | MSG_DONTWAIT) < 0) {}
+        close(gps_fd_);
+        gps_fd_ = -1;
+    }
+    void gps_line(const std::string& js) {
+        std::string cls = json_str(js, "class");
+        if (cls == "DEVICES" || cls == "DEVICE") {
+            gps_.device = js.find("\"path\"") != std::string::npos;
+        } else if (cls == "TPV") {
+            gps_.device = true;
+            gps_.mode = int(json_num(js, "mode", 0));
+            if (gps_.mode >= 2) {
+                gps_.lat = json_num(js, "lat", gps_.lat);
+                gps_.lon = json_num(js, "lon", gps_.lon);
+                gps_.speed_mps = json_num(js, "speed", 0);
+                gps_.track_deg = json_num(js, "track", gps_.track_deg);
+                gps_.error_m = json_num(js, "eph", 0);
+            }
+            if (gps_.mode >= 3) gps_.alt_m = json_num(js, "altMSL", json_num(js, "alt", gps_.alt_m));
+            std::string t = json_str(js, "time");
+            if (!t.empty()) gps_.time = t;
+        } else if (cls == "SKY") {
+            int seen = 0, used = 0;
+            for (size_t i = js.find("\"PRN\""); i != std::string::npos; i = js.find("\"PRN\"", i + 1)) {
+                ++seen;
+                size_t end = js.find('}', i);
+                size_t u = js.find("\"used\":true", i);
+                if (u != std::string::npos && u < end) ++used;
+            }
+            gps_.sats_seen = seen ? seen : int(json_num(js, "nSat", gps_.sats_seen));
+            gps_.sats_used = seen ? used : int(json_num(js, "uSat", gps_.sats_used));
+        }
+    }
+    static double json_num(const std::string& js, const std::string& key, double def) {
+        auto k = js.find("\"" + key + "\":");
+        if (k == std::string::npos) return def;
+        const char* p = js.c_str() + k + key.size() + 3;
+        char* end = nullptr;
+        double v = std::strtod(p, &end);
+        return end == p ? def : v;
+    }
+
+    // --- LoRa mesh: meshtasticd.service (config in /etc/meshtasticd/config.d).
+    MeshStatus mesh() override {
+        time_t now = time(nullptr);
+        if (now - mesh_at_ < 3 && mesh_at_) return mesh_cache_;
+        mesh_at_ = now;
+        MeshStatus m;
+        m.installed = access("/usr/bin/meshtasticd", X_OK) == 0 || access("/usr/sbin/meshtasticd", X_OK) == 0;
+        std::string st = run("systemctl is-active meshtasticd.service");
+        m.running = st.rfind("active", 0) == 0 || st.rfind("activating", 0) == 0;
+        if (m.running) {
+            // Without a working radio the daemon falls back to a simulated
+            // one and says so in its log (pi is in the adm group).
+            m.no_radio = !run("journalctl -u meshtasticd -b --no-pager -n 300 2>/dev/null | "
+                              "grep -m1 -i -E 'simradio|sim radio|radio init failed'").empty();
+            NetStatus n = read_net();
+            std::string ip = !n.tailscale_ip.empty() && n.ip.empty() ? n.tailscale_ip : n.ip;
+            if (!ip.empty()) {
+                m.web_url = "https://" + ip + ":9443";
+                m.api = ip;
+            }
+        }
+        return mesh_cache_ = m;
+    }
+    void mesh_start() override {
+        set_ext_power(true);
+        run("systemctl --no-block start meshtasticd.service");
+        mesh_at_ = 0;
+    }
+    void mesh_stop() override {
+        run("systemctl --no-block stop meshtasticd.service");
+        mesh_at_ = 0;
+    }
+
     // --- Terminal: zeroos-terminal.service runs tmux on tty3 and switches to it.
     bool terminal_open(const std::string& command) override {
         std::string dir = std::string(std::getenv("HOME") ? std::getenv("HOME") : "/home/pi") + "/.cache/zeroos";
@@ -804,6 +953,13 @@ private:
     bool dock_cache_ = false;
     TsStatus ts_cache_;
     SyncStatus sync_cache_;
+    std::vector<std::string> ext5v_;
+    int gps_fd_ = -1;
+    bool gps_sent_ = false;
+    time_t gps_want_ = 0, gps_try_ = 0, mesh_at_ = 0;
+    std::string gps_buf_;
+    GpsFix gps_;
+    MeshStatus mesh_cache_;
     time_t sync_at_ = 0, sync_run_at_ = 0;
     bool sync_running_ = false;
     time_t ts_at_ = 0, term_at_ = 0;

@@ -114,6 +114,27 @@ struct SyncStatus {
     std::vector<SyncRequest> requests;
 };
 
+// GPS (Cap LoRa-1262's GPS, or a GPS unit on the Grove port), through gpsd.
+struct GpsFix {
+    bool device = false;      // gpsd sees a receiver
+    int mode = 0;             // 0 unknown, 1 no fix, 2 2D, 3 3D
+    double lat = 0, lon = 0;  // degrees
+    double alt_m = 0;         // above sea level
+    double speed_mps = 0, track_deg = 0;
+    double error_m = 0;       // horizontal estimate (eph), 0 unknown
+    int sats_used = 0, sats_seen = 0;
+    std::string time;         // UTC, ISO 8601
+};
+
+// LoRa mesh: meshtasticd with the Cap LoRa-1262 (docs/EXPANSION.md).
+struct MeshStatus {
+    bool installed = false;
+    bool running = false;
+    bool no_radio = false;    // it fell back to a simulated radio: no module, or wrong pins
+    std::string web_url;      // Meshtastic web client, e.g. https://192.168.1.20:9443
+    std::string api;          // for the phone apps: "192.168.1.20" (TCP 4403)
+};
+
 struct IrCode {
     std::string name;
     std::string protocol;   // nec, rc5, sony12, raw...
@@ -231,6 +252,20 @@ public:
     virtual bool sync_add_device(const std::string& id, const std::string& name) = 0;
     virtual bool sync_remove_device(const std::string& id) = 0;
     virtual void sync_rescan() = 0;
+
+    // Expansion port 5 V (off by default; powers a Cap module or Grove unit).
+    virtual bool ext_power() = 0;
+    virtual void set_ext_power(bool on) = 0;
+
+    // GPS. gps() starts watching gpsd (which starts on demand) and stays
+    // watching while it keeps being called; gps_stop() lets it go now.
+    virtual GpsFix gps() = 0;
+    virtual void gps_stop() = 0;
+
+    // LoRa mesh (Meshtastic).
+    virtual MeshStatus mesh() = 0;
+    virtual void mesh_start() = 0;
+    virtual void mesh_stop() = 0;
 
     // Terminal on the built-in screen: hands the screen and keyboard to a
     // Linux console running tmux (sessions survive going back). command ""

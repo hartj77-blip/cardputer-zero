@@ -220,6 +220,51 @@ public:
     }
     void sync_rescan() override {}
 
+    // Expansion, simulated: a Cap LoRa-1262 is plugged in. The GPS gets a
+    // fix 6 s after it is first asked; the mesh starts in 2 s.
+    bool ext_power() override { return ext_on_; }
+    void set_ext_power(bool on) override { ext_on_ = on; }
+    GpsFix gps() override {
+        if (!gps_on_) {
+            gps_on_ = true;
+            gps_clock_.start();
+        }
+        GpsFix f;
+        f.device = true;
+        long t = gps_clock_.ms();
+        f.sats_seen = int(std::min<long>(14, 3 + t / 700));
+        f.mode = t < 6000 ? 1 : 3;
+        f.time = "2026-11-16T14:20:31.000Z";
+        if (f.mode >= 2) {
+            double w = t / 4000.0;
+            f.lat = 51.500729 + 0.00002 * std::sin(w);
+            f.lon = -0.124625 + 0.00003 * std::cos(w);
+            f.alt_m = 18.4;
+            f.speed_mps = 1.3;
+            f.track_deg = 64;
+            f.error_m = 3.2;
+            f.sats_used = std::max(4, f.sats_seen - 4);
+        }
+        return f;
+    }
+    void gps_stop() override { gps_on_ = false; }
+    MeshStatus mesh() override {
+        MeshStatus m;
+        m.installed = true;
+        m.running = mesh_on_ && mesh_clock_.ms() > 2000;
+        if (m.running) {
+            m.web_url = "https://192.168.1.42:9443";
+            m.api = "192.168.1.42";
+        }
+        return m;
+    }
+    void mesh_start() override {
+        ext_on_ = true;
+        if (!mesh_on_) mesh_clock_.start();
+        mesh_on_ = true;
+    }
+    void mesh_stop() override { mesh_on_ = false; }
+
     bool terminal_open(const std::string&) override { return false; }   // no real console here
     bool terminal_active() override { return false; }
 
@@ -347,6 +392,8 @@ private:
     int sync_phone_ = 0;   // 0 asking, 1 accepted, 2 ignored
     long sync_phone_at_ = 0;
     PlayClock sync_clock_;
+    bool ext_on_ = false, gps_on_ = false, mesh_on_ = false;
+    PlayClock gps_clock_, mesh_clock_;
     CpuMode cpu_ = CpuMode::Balanced;
 };
 

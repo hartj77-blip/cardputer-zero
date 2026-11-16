@@ -1,7 +1,7 @@
 #!/bin/sh
 # Control Dock mode (the desktop on the HDMI monitor).
 #   zeroos-dock start | stop | status
-#   zeroos-dock open terminal | browser | files | video [FILE] | rdp HOST
+#   zeroos-dock open terminal | browser [URL] | files | video [FILE] | rdp HOST
 uid=$(id -u pi 2>/dev/null || echo 1000)
 case "$1" in
     start)  exec systemctl --no-block start zeroos-dock.service ;;
@@ -12,7 +12,7 @@ case "$1" in
         export XDG_RUNTIME_DIR="/run/user/$uid" WAYLAND_DISPLAY=wayland-0
         case "$2" in
             terminal) cmd="foot" ;;
-            browser)  cmd="zeroos-browser" ;;
+            browser)  shift 2; setsid zeroos-browser "$@" >/dev/null 2>&1 < /dev/null & exit 0 ;;
             files)    cmd="foot -e mc" ;;
             video)    shift 2; setsid zeroos-video "$@" >/dev/null 2>&1 < /dev/null & exit 0 ;;
             # Remote desktop (Windows, or any RDP server). FreeRDP asks for
@@ -23,7 +23,7 @@ case "$1" in
                           'wlfreerdp3 /v:"$1" /dynamic-resolution /cert:tofu +clipboard /sound; echo; echo "Press Enter to close"; read _' \
                           rdp "$3" >/dev/null 2>&1 < /dev/null &
                       exit 0 ;;
-            *) echo "usage: zeroos-dock open terminal|browser|files|video [FILE]|rdp HOST" >&2; exit 2 ;;
+            *) echo "usage: zeroos-dock open terminal|browser [URL]|files|video [FILE]|rdp HOST" >&2; exit 2 ;;
         esac
         setsid $cmd >/dev/null 2>&1 < /dev/null &
         ;;

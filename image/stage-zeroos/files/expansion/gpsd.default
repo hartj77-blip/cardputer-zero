@@ -1,0 +1,7 @@
+# ZeroOS: GPS on the UART (Cap LoRa-1262's AT6668 at 115200, or a Grove GPS
+# unit; gpsd finds the speed). USB GPS dongles are picked up as well.
+# gpsd.socket starts gpsd when ZeroShell or meshtasticd connects; without -n
+# it only reads the receiver while someone is watching.
+DEVICES="/dev/serial0"
+GPSD_OPTIONS="-s 115200"
+USBAUTO="true"

@@ -55,8 +55,10 @@ jobs:
             echo 'deb [signed-by=/usr/share/keyrings/rpi.gpg] http://archive.raspberrypi.com/debian trixie main' > /etc/apt/sources.list.d/rpi.list
             curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg -o /usr/share/keyrings/tailscale-archive-keyring.gpg
             curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.tailscale-keyring.list -o /etc/apt/sources.list.d/tailscale.list
+            curl -fsSL https://download.opensuse.org/repositories/network:/Meshtastic:/beta/Debian_13/Release.key -o /usr/share/keyrings/meshtastic.asc
+            echo 'deb [signed-by=/usr/share/keyrings/meshtastic.asc] http://download.opensuse.org/repositories/network:/Meshtastic:/beta/Debian_13/ /' > /etc/apt/sources.list.d/meshtastic.list
             apt-get update -qq
-            apt-get install -s $pkgs tailscale > /tmp/plan.txt
+            apt-get install -s $pkgs tailscale meshtasticd > /tmp/plan.txt
             grep -c '^Inst' /tmp/plan.txt"
       - name: Build ZeroShell (arm64)
         run: |

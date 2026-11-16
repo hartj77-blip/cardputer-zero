@@ -1,12 +1,14 @@
 #!/bin/sh
 # Run as root before ZeroShell starts (ExecStartPre=+ in zeroshell.service).
 # Lets the video group (ZeroShell runs as pi) switch the CPU governor and top
-# speed, and turn the backlight and panel fully off. These sysfs files appear
+# speed, turn the backlight and panel fully off, and switch the expansion
+# port 5 V (an LED-class supply, e.g. ext_5v_out) for GPS and LoRa modules. These sysfs files appear
 # when the drivers load, so a udev rule can't reliably catch all of them.
 for f in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor \
          /sys/devices/system/cpu/cpufreq/policy*/scaling_max_freq \
          /sys/class/backlight/*/bl_power \
-         /sys/class/graphics/fb*/blank; do
+         /sys/class/graphics/fb*/blank \
+         /sys/class/leds/*5v*/brightness; do
     [ -e "$f" ] || continue
     chgrp video "$f" && chmod g+w "$f"
 done

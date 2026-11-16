@@ -1,4 +1,4 @@
 # ZeroOS: if memory runs out, close the biggest app before the system freezes.
 # Never pick the UI, SSH or system services; prefer browsers and media players.
 # (systemd splits these on spaces, so the patterns must not contain any.)
-EARLYOOM_ARGS="-m 4 -s 8 -r 0 --avoid ^(zeroshell|sshd|systemd.*|NetworkManager|wpa_supplicant|tailscaled|pipewire.*|wireplumber|dbus-.*)$ --prefer ^(chromium.*|syncthing|firefox.*|mpv|ffplay|python3|node)$"
+EARLYOOM_ARGS="-m 4 -s 8 -r 0 --avoid ^(zeroshell|sshd|systemd.*|NetworkManager|wpa_supplicant|tailscaled|pipewire.*|wireplumber|dbus-.*)$ --prefer ^(chromium.*|syncthing|meshtasticd|firefox.*|mpv|ffplay|python3|node)$"

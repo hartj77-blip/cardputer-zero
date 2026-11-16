@@ -17,6 +17,8 @@ std::unique_ptr<App> make_dock_app();
 std::unique_ptr<App> make_terminal_app();
 std::unique_ptr<App> make_remote_app();
 std::unique_ptr<App> make_sync_app();
+std::unique_ptr<App> make_gps_app();
+std::unique_ptr<App> make_mesh_app();
 
 const std::vector<AppInfo>& app_registry() {
     static const std::vector<AppInfo> apps = {
@@ -28,6 +30,8 @@ const std::vector<AppInfo>& app_registry() {
         {"media", "Media", LV_SYMBOL_AUDIO, 0xff7eb6, make_media_app},
         {"wifi", "Wi-Fi", LV_SYMBOL_WIFI, 0x3fb950, make_wifi_app},
         {"ir", "IR Remote", LV_SYMBOL_POWER, 0xf85149, make_ir_app},
+        {"gps", "GPS", LV_SYMBOL_GPS, 0x3fb950, make_gps_app},
+        {"mesh", "Mesh", LV_SYMBOL_ENVELOPE, 0xff8a1f, make_mesh_app},
         {"compass", "Compass", LV_SYMBOL_GPS, 0xff8a1f, make_compass_app},
         {"battery", "Battery", LV_SYMBOL_BATTERY_3, 0x3fb950, make_battery_app},
         {"clock", "Clock", LV_SYMBOL_BELL, 0xbc8cff, make_clock_app},
