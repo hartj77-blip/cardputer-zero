@@ -133,6 +133,17 @@ struct MeshStatus {
     bool no_radio = false;    // it fell back to a simulated radio: no module, or wrong pins
     std::string web_url;      // Meshtastic web client, e.g. https://192.168.1.20:9443
     std::string api;          // for the phone apps: "192.168.1.20" (TCP 4403)
+    bool connected = false;   // ZeroShell is talking to the daemon (chat works)
+    std::string my_name;      // this node's short name
+    int nodes = 0;            // other nodes heard of
+};
+
+struct MeshMessage {
+    std::string from;         // sender's short name (or !hex id); "" for ours
+    std::string text;
+    bool mine = false;
+    bool direct = false;      // sent to us only, not the whole channel
+    long time = 0;            // unix time
 };
 
 struct IrCode {
@@ -266,6 +277,11 @@ public:
     virtual MeshStatus mesh() = 0;
     virtual void mesh_start() = 0;
     virtual void mesh_stop() = 0;
+    // Chat on the primary channel. seq counts received messages, so the shell
+    // can notice new ones cheaply.
+    virtual std::vector<MeshMessage> mesh_messages() = 0;
+    virtual bool mesh_send(const std::string& text) = 0;
+    virtual int mesh_seq() = 0;
 
     // Terminal on the built-in screen: hands the screen and keyboard to a
     // Linux console running tmux (sessions survive going back). command ""

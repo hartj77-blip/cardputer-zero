@@ -25,9 +25,14 @@ PC). Leaving the app turns the 5 V off again unless the mesh is running.
 
 ## Mesh (Meshtastic)
 
-Open **Mesh** and choose **Turn on mesh**. The radio starts in a few seconds.
-Then chat:
+Open **Mesh** and choose **Turn on mesh**. The radio starts in a few seconds,
+and Mesh switches to its chat page:
 
+- **On the Cardputer:** messages on the primary channel scroll above a text
+  box; type and press **Enter** to send to everyone. Messages sent only to you
+  are orange. **Tab** switches between chat and the info page (QR code, on/off).
+  A message that arrives while you're in another app shows at the top of the
+  screen with a beep.
 - **From your phone:** scan the QR code; it opens the Meshtastic web client
   on the Cardputer (accept the certificate warning once). Or in the
   Meshtastic app, add a node by IP address (the address under the QR code).
@@ -39,8 +44,8 @@ The first time, set your **region** (for example US or EU_868) in the web
 client's radio settings. The radio doesn't transmit until a region is set,
 and it must match where you are and what other nodes use.
 
-Chatting on the Cardputer's own screen and keyboard is the next step (it
-needs a Meshtastic API client in ZeroShell).
+Still to do: direct messages to one node, other channels, and keeping
+messages after a restart (they're kept in memory, the last 200).
 
 **Turn off mesh** stops the radio and the expansion port's 5 V. The mesh
 uses its own battery: leave it off when you don't need it **(measure)**.
@@ -55,6 +60,7 @@ uses its own battery: leave it off when you don't need it **(measure)**.
 | `config.txt`, `cmdline.txt` | `enable_uart=1`; no serial console on the UART, so it's free for GPS. |
 | `gpsd` | Reads `/dev/serial0` at 115200 (and USB GPS dongles). Socket-activated: it starts when the GPS app or meshtasticd connects and stops reading the receiver when they stop watching. Config: `/etc/default/gpsd`. |
 | `meshtasticd` | Meshtastic's Linux daemon, from Meshtastic's Debian repository (beta channel). Off at boot; the Mesh app starts it (polkit allows `pi` exactly this unit). Radio config: `/etc/meshtasticd/config.d/zeroos-cap-lora-1262.yaml` (SX1262 on `spidev0.1`, RESET 26, BUSY 22, IRQ 23, DIO2 as RF switch, DIO3 TCXO). It takes its position from gpsd, serves the web client on port 9443 and the app API on TCP 4403. |
+| Chat in ZeroShell | A small client for that API (`hal/meshtastic.cpp`, hand-written protobuf, no library): asks for the node list, reads text messages, sends to the primary channel. |
 
 ## To confirm on hardware
 

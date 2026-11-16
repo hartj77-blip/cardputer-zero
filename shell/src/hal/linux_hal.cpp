@@ -35,9 +35,11 @@
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
+#include <map>
 #include <sstream>
 
 #include "hal/hal.h"
+#include "hal/meshtastic.h"
 #include "hal/play_clock.h"
 #include "hal/proc_stats.h"
 
@@ -191,6 +193,8 @@ public:
             backlight_ = "/sys/class/backlight/" + n + "/";
             break;
         }
+        // The mesh may still be running from before ZeroShell restarted.
+        mesh_wanted_ = run("systemctl is-active meshtasticd.service 2>/dev/null").rfind("active", 0) == 0;
         // Expansion 5 V: LED-class supplies (ext_5v_out on M5's image; the
         // Grove port's, if the kernel exposes it the same way).
         for (auto& n : list_dir("/sys/class/leds/")) {
@@ -203,6 +207,7 @@ public:
     void poll() override {
         // Nobody has asked for the position for 5 s: let gpsd go idle.
         if (gps_fd_ >= 0 && time(nullptr) - gps_want_ > 5) gps_stop();
+        mesh_pump();
         // Battery and IMU are cheap sysfs reads; cache them per poll.
         bat_cache_ = read_battery();
         imu_cache_ = read_imu();
@@ -807,9 +812,15 @@ private:
         m.running = st.rfind("active", 0) == 0 || st.rfind("activating", 0) == 0;
         if (m.running) {
             // Without a working radio the daemon falls back to a simulated
-            // one and says so in its log (pi is in the adm group).
-            m.no_radio = !run("journalctl -u meshtasticd -b --no-pager -n 300 2>/dev/null | "
-                              "grep -m1 -i -E 'simradio|sim radio|radio init failed'").empty();
+            // one and says so in its log (pi is in the adm group). Look three
+            // times, 15 s apart, after it starts.
+            if (mesh_log_checks_ < 3 && now - mesh_log_at_ >= 15) {
+                mesh_log_at_ = now;
+                ++mesh_log_checks_;
+                mesh_no_radio_ = !run("journalctl -u meshtasticd -b --no-pager -n 300 2>/dev/null | "
+                                      "grep -m1 -i -E 'simradio|sim radio|radio init failed'").empty();
+            }
+            m.no_radio = mesh_no_radio_;
             NetStatus n = read_net();
             std::string ip = !n.tailscale_ip.empty() && n.ip.empty() ? n.tailscale_ip : n.ip;
             if (!ip.empty()) {
@@ -817,9 +828,16 @@ private:
                 m.api = ip;
             }
         }
+        m.connected = mesh_connected_;
+        m.my_name = mesh_me_ ? node_name(mesh_me_) : "";
+        m.nodes = int(mesh_names_.size()) - (mesh_names_.count(mesh_me_) ? 1 : 0);
         return mesh_cache_ = m;
     }
     void mesh_start() override {
+        mesh_wanted_ = true;
+        mesh_no_radio_ = false;
+        mesh_log_at_ = time(nullptr);   // give it 15 s before reading its log
+        mesh_log_checks_ = 0;
         set_ext_power(true);
         run("systemctl --no-block start meshtasticd.service");
         mesh_at_ = 0;
@@ -827,7 +845,105 @@ private:
     void mesh_stop() override {
         run("systemctl --no-block stop meshtasticd.service");
         mesh_at_ = 0;
+        mesh_close();
     }
+
+    // Chat: a client connection to meshtasticd's API while it runs.
+    void mesh_pump() {
+        time_t now = time(nullptr);
+        if (!mesh_wanted_) return;   // never started this session: nothing to ask
+        if (now - mesh_at_ >= 3) mesh();   // refresh "running" every few seconds
+        if (!mesh_cache_.running) {
+            mesh_close();
+            return;
+        }
+        if (mesh_fd_ < 0) {
+            if (now - mesh_try_ < 5) return;
+            mesh_try_ = now;
+            mesh_fd_ = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+            sockaddr_in a{};
+            a.sin_family = AF_INET;
+            a.sin_port = htons(4403);
+            a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            if (mesh_fd_ >= 0 && connect(mesh_fd_, reinterpret_cast<sockaddr*>(&a), sizeof a) < 0 &&
+                errno != EINPROGRESS) {
+                mesh_close();
+                return;
+            }
+            mesh_hello_ = false;
+            mesh_in_.clear();
+        }
+        if (!mesh_hello_ && mesh_write(mt::want_config(uint32_t(now)))) {
+            mesh_hello_ = true;
+            mesh_beat_ = now;
+        }
+        if (mesh_hello_ && now - mesh_beat_ > 240 && mesh_write(mt::heartbeat())) mesh_beat_ = now;
+        char buf[2048];
+        for (;;) {
+            ssize_t n = recv(mesh_fd_, buf, sizeof buf, MSG_DONTWAIT);
+            if (n > 0) {
+                mesh_in_.feed(buf, size_t(n));
+                continue;
+            }
+            if (n == 0 || (errno != EAGAIN && errno != EWOULDBLOCK && errno != ENOTCONN)) {
+                mesh_close();
+                return;
+            }
+            break;
+        }
+        std::string payload;
+        while (mesh_in_.next(payload)) {
+            mt::Event e = mt::decode(payload);
+            switch (e.kind) {
+            case mt::Event::MyNode: mesh_me_ = e.num; break;
+            case mt::Event::Node:
+                mesh_names_[e.num] = e.short_name.empty() ? e.long_name : e.short_name;
+                break;
+            case mt::Event::ConfigDone: mesh_connected_ = true; break;
+            case mt::Event::Text: {
+                if (e.from == mesh_me_) break;
+                MeshMessage m;
+                m.from = node_name(e.from);
+                m.text = e.text;
+                m.direct = e.to != mt::kBroadcast;
+                m.time = e.rx_time ? long(e.rx_time) : long(now);
+                mesh_log_.push_back(m);
+                if (mesh_log_.size() > 200) mesh_log_.erase(mesh_log_.begin());
+                ++mesh_seq_;
+                break;
+            }
+            default: break;
+            }
+        }
+    }
+    std::string node_name(uint32_t num) {
+        auto it = mesh_names_.find(num);
+        if (it != mesh_names_.end() && !it->second.empty()) return it->second;
+        char b[16];
+        std::snprintf(b, sizeof b, "!%08x", num);
+        return b;
+    }
+    bool mesh_write(const std::string& frame) {
+        if (mesh_fd_ < 0) return false;
+        return send(mesh_fd_, frame.data(), frame.size(), MSG_NOSIGNAL | MSG_DONTWAIT) == ssize_t(frame.size());
+    }
+    void mesh_close() {
+        if (mesh_fd_ >= 0) close(mesh_fd_);
+        mesh_fd_ = -1;
+        mesh_hello_ = mesh_connected_ = false;
+    }
+    std::vector<MeshMessage> mesh_messages() override { return mesh_log_; }
+    bool mesh_send(const std::string& text) override {
+        if (!mesh_connected_ || text.empty()) return false;
+        if (!mesh_write(mt::text_message(text.substr(0, 200), mt::kBroadcast, 0, ++mesh_packet_id_))) return false;
+        MeshMessage m;
+        m.text = text.substr(0, 200);
+        m.mine = true;
+        m.time = long(time(nullptr));
+        mesh_log_.push_back(m);
+        return true;
+    }
+    int mesh_seq() override { return mesh_seq_; }
 
     // --- Terminal: zeroos-terminal.service runs tmux on tty3 and switches to it.
     bool terminal_open(const std::string& command) override {
@@ -960,6 +1076,16 @@ private:
     std::string gps_buf_;
     GpsFix gps_;
     MeshStatus mesh_cache_;
+    int mesh_fd_ = -1, mesh_seq_ = 0;
+    bool mesh_wanted_ = false, mesh_no_radio_ = false;
+    time_t mesh_log_at_ = 0;
+    int mesh_log_checks_ = 3;   // none until mesh_start
+    bool mesh_hello_ = false, mesh_connected_ = false;
+    time_t mesh_try_ = 0, mesh_beat_ = 0;
+    uint32_t mesh_me_ = 0, mesh_packet_id_ = uint32_t(time(nullptr)) & 0xfffff;
+    mt::Stream mesh_in_;
+    std::map<uint32_t, std::string> mesh_names_;
+    std::vector<MeshMessage> mesh_log_;
     time_t sync_at_ = 0, sync_run_at_ = 0;
     bool sync_running_ = false;
     time_t ts_at_ = 0, term_at_ = 0;

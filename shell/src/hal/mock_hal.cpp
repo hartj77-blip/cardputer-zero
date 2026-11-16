@@ -255,8 +255,41 @@ public:
         if (m.running) {
             m.web_url = "https://192.168.1.42:9443";
             m.api = "192.168.1.42";
+            m.connected = true;
+            m.my_name = "CZ01";
+            m.nodes = 3;
         }
         return m;
+    }
+    // Simulated chat: a hiker says hello after 3 s; replies come back 4 s
+    // after you send.
+    void mesh_chat_tick() {
+        if (!mesh_on_) return;
+        long t = mesh_clock_.ms();
+        if (!mesh_hello_ && t > 3000) {
+            mesh_hello_ = true;
+            mesh_log_.push_back({"HIKE", "Anyone near the north trailhead?", false, false, long(std::time(nullptr))});
+            ++mesh_seq_;
+        }
+        if (mesh_reply_at_ && t > mesh_reply_at_) {
+            mesh_reply_at_ = 0;
+            mesh_log_.push_back({"BASE", "Copy that. Heading your way.", false, false, long(std::time(nullptr))});
+            ++mesh_seq_;
+        }
+    }
+    std::vector<MeshMessage> mesh_messages() override {
+        mesh_chat_tick();
+        return mesh_log_;
+    }
+    bool mesh_send(const std::string& text) override {
+        if (!mesh_on_ || text.empty()) return false;
+        mesh_log_.push_back({"", text, true, false, long(std::time(nullptr))});
+        mesh_reply_at_ = mesh_clock_.ms() + 4000;
+        return true;
+    }
+    int mesh_seq() override {
+        mesh_chat_tick();
+        return mesh_seq_;
     }
     void mesh_start() override {
         ext_on_ = true;
@@ -394,6 +427,10 @@ private:
     PlayClock sync_clock_;
     bool ext_on_ = false, gps_on_ = false, mesh_on_ = false;
     PlayClock gps_clock_, mesh_clock_;
+    std::vector<MeshMessage> mesh_log_;
+    bool mesh_hello_ = false;
+    long mesh_reply_at_ = 0;
+    int mesh_seq_ = 0;
     CpuMode cpu_ = CpuMode::Balanced;
 };
 

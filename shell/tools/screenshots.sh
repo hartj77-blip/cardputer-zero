@@ -44,7 +44,9 @@ STEPS+=",down,down,down,down,down,down,enter,wait:300,shot:27-sync-id.ppm"
 STEPS+=",open:gps,wait:2000,shot:28-gps-searching.ppm"
 STEPS+=",wait:6000,shot:29-gps-fix.ppm"
 STEPS+=",open:mesh,wait:300,shot:30-mesh-off.ppm"
-STEPS+=",enter,wait:3500,shot:31-mesh-on.ppm"
+STEPS+=",enter,wait:3500,shot:31-mesh-chat.ppm"
+STEPS+=",type:On my way,enter,wait:4500,shot:32-mesh-reply.ppm"
+STEPS+=",tab,wait:300,shot:33-mesh-info.ppm"
 
 (cd "$OUT" && HOME="$DEMO" TZ=UTC "$BIN" --script "$STEPS")
 python3 "$HERE/ppm2png.py" "$OUT"

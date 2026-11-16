@@ -1,7 +1,10 @@
 // Mesh: the Cardputer as a Meshtastic LoRa node (Cap LoRa-1262), for text
-// messages with no phone signal or internet. meshtasticd runs the radio; you
-// chat from the Meshtastic phone app (connect by IP) or its web page, shown
-// here as a QR code, or on the monitor in Dock mode. See docs/EXPANSION.md.
+// messages with no phone signal or internet. meshtasticd runs the radio.
+//   Chat page (when the mesh is on): messages on the primary channel; type
+//     and press Enter to send to everyone. Tab: the info page.
+//   Info page: on/off, QR code for the web client (chat from a phone),
+//     open it on the monitor in Dock mode, GPS. Tab or Esc: back to chat.
+// See docs/EXPANSION.md.
 #include "apps/common.h"
 #include "ui/power.h"
 
@@ -22,22 +25,47 @@ public:
             rebuild();
             return;
         }
-        if (++n_ % 10) return;
+        if (++n_ % 5) return;
+        if (chat_ && hal().mesh_seq() != seq_) fill_messages();
+        if (n_ % 10) return;
         MeshStatus m = hal().mesh();
         if (sig(m) != sig_) rebuild();
     }
 
+    bool on_key(uint32_t key) override {
+        if (key != 9 || !can_chat()) return false;   // Tab: chat <-> info
+        info_ = !info_;
+        dirty_ = true;
+        return true;
+    }
+
+    bool on_back() override {
+        if (info_ && can_chat()) {
+            info_ = false;
+            dirty_ = true;
+            return true;
+        }
+        return false;
+    }
+
 private:
     static std::string sig(const MeshStatus& m) {
-        return std::to_string(m.running) + std::to_string(m.no_radio) + m.web_url;
+        return std::to_string(m.running) + std::to_string(m.no_radio) + std::to_string(m.connected) + m.web_url;
     }
+    bool can_chat() const { return st_.running && st_.connected && !st_.no_radio; }
 
     void rebuild() {
         st_ = hal().mesh();
         sig_ = sig(st_);
         if (st_.running) starting_ = false;
+        if (ta_) draft_ = lv_textarea_get_text(ta_);
         lv_obj_clean(root_);
+        chat_ = ta_ = nullptr;
         if (group) lv_group_remove_all_objs(group);
+        if (can_chat() && !info_) {
+            build_chat();
+            return;
+        }
 
         lv_obj_t* panel = lv_obj_create(root_);
         style_panel(panel);
@@ -110,15 +138,85 @@ private:
                 }, this);
             }
         }
+        if (can_chat()) {
+            list_button(list, LV_SYMBOL_ENVELOPE, "Chat (Tab)", [](lv_event_t* e) {
+                auto* self = static_cast<MeshApp*>(lv_event_get_user_data(e));
+                self->info_ = false;
+                self->dirty_ = true;
+            }, this);
+        }
         list_button(list, LV_SYMBOL_GPS, "GPS", [](lv_event_t*) { shell_open_app("gps"); }, nullptr);
         finish_list(list);
     }
 
+    void build_chat() {
+        std::string head = st_.my_name.empty() ? std::string("Mesh") : st_.my_name;
+        head += fmt("  |  %d nodes  |  Tab: info", st_.nodes);
+        lv_obj_t* h = label(root_, head.c_str(), &lv_font_montserrat_12, kMuted);
+        lv_obj_set_pos(h, 8, 2);
+
+        chat_ = lv_obj_create(root_);
+        style_panel(chat_);
+        lv_obj_set_pos(chat_, 4, 18);
+        lv_obj_set_size(chat_, kScreenW - 8, kContentH - 58);
+        lv_obj_set_flex_flow(chat_, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_all(chat_, 4, 0);
+        lv_obj_set_style_pad_row(chat_, 2, 0);
+        fill_messages();
+
+        ta_ = lv_textarea_create(root_);
+        lv_textarea_set_one_line(ta_, true);
+        lv_textarea_set_placeholder_text(ta_, "Message everyone, Enter to send");
+        lv_textarea_set_max_length(ta_, 200);
+        lv_textarea_set_text(ta_, draft_.c_str());
+        lv_obj_set_width(ta_, kScreenW - 8);
+        lv_obj_set_pos(ta_, 4, kContentH - 37);
+        lv_obj_add_event_cb(ta_, [](lv_event_t* e) {
+            auto* self = static_cast<MeshApp*>(lv_event_get_user_data(e));
+            std::string text = lv_textarea_get_text(self->ta_);
+            if (text.empty()) return;
+            if (hal().mesh_send(text)) {
+                lv_textarea_set_text(self->ta_, "");
+                self->fill_messages();
+            } else {
+                shell_toast("Not sent: mesh not ready");
+            }
+        }, LV_EVENT_READY, this);
+        lv_group_add_obj(group, ta_);
+        lv_group_focus_obj(ta_);
+        lv_group_set_editing(group, true);
+    }
+
+    void fill_messages() {
+        if (!chat_) return;
+        seq_ = hal().mesh_seq();
+        lv_obj_clean(chat_);
+        auto msgs = hal().mesh_messages();
+        size_t first = msgs.size() > 30 ? msgs.size() - 30 : 0;   // keep the screen light
+        if (msgs.empty()) {
+            label(chat_, "No messages yet. Say hello!", &lv_font_montserrat_12, kMuted);
+        }
+        for (size_t i = first; i < msgs.size(); ++i) {
+            const MeshMessage& m = msgs[i];
+            std::string who = m.mine ? "You" : m.from + (m.direct ? " (to you)" : "");
+            lv_obj_t* l = lv_label_create(chat_);
+            lv_label_set_text(l, (who + ": " + m.text).c_str());
+            lv_obj_set_style_text_font(l, &lv_font_montserrat_12, 0);
+            lv_obj_set_style_text_color(l, c(m.mine ? kGood : m.direct ? kAccent : kText), 0);
+            lv_label_set_long_mode(l, LV_LABEL_LONG_WRAP);
+            lv_obj_set_width(l, kScreenW - 24);
+        }
+        lv_obj_update_layout(chat_);
+        lv_obj_scroll_to_y(chat_, LV_COORD_MAX, LV_ANIM_OFF);
+    }
+
     lv_obj_t* root_ = nullptr;
+    lv_obj_t* chat_ = nullptr;
+    lv_obj_t* ta_ = nullptr;
     MeshStatus st_;
-    std::string sig_;
-    bool starting_ = false, dirty_ = false;
-    int n_ = 0;
+    std::string sig_, draft_;
+    bool starting_ = false, dirty_ = false, info_ = false;
+    int n_ = 0, seq_ = -1;
 };
 }  // namespace
 

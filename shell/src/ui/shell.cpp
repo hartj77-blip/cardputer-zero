@@ -182,6 +182,20 @@ void Shell::tick_cb(lv_timer_t* t) {
     power().tick(lv_tick_get());
     remote_tick(lv_tick_get());
     sync_tick(lv_tick_get());
+    // New mesh message while you're elsewhere: show it.
+    static int mesh_seen = 0, mesh_n = 0;
+    if (++mesh_n % 5 == 0) {
+        int seq = hal().mesh_seq();
+        if (seq > mesh_seen) {
+            auto msgs = hal().mesh_messages();
+            if (s->current_app() != "mesh" && !msgs.empty() && !msgs.back().mine) {
+                const MeshMessage& m = msgs.back();
+                s->toast(LV_SYMBOL_ENVELOPE " " + m.from + ": " + m.text.substr(0, 60));
+                hal().beep(1320, 60);
+            }
+        }
+        mesh_seen = seq;
+    }
     static int n = 0;
     // Terminal closed (exit, or tmux detach with Alt+`): take the screen back.
     if (s->handoff_ && lv_tick_elaps(s->handoff_since_) > 1500 && !hal().terminal_active()) {

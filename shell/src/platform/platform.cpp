@@ -376,6 +376,7 @@ int platform_run_script(const std::string& script) {
         else if (cmd == "enter") g_keys.push_back(LV_KEY_ENTER);
         else if (cmd == "esc") g_keys.push_back(LV_KEY_ESC);
         else if (cmd == "bksp") g_keys.push_back(LV_KEY_BACKSPACE);
+        else if (cmd == "tab") g_keys.push_back(9);
         else if (cmd == "type") for (char ch : arg) g_keys.push_back(uint32_t((unsigned char)ch));
         else if (cmd == "key" && !arg.empty()) g_keys.push_back(uint32_t((unsigned char)arg[0]));
         else if (cmd == "open") { drain_keys(); shell_open_app(arg); run_for(100); }
