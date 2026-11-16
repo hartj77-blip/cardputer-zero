@@ -281,6 +281,20 @@ dd { margin: 0; color: var(--muted); align-self: center; }
     canvas.focus({ preventScroll: true });
   });
   appsEl.appendChild(hdmiBtn);
+  // Pretend motion: how the Cardputer is lying (face down turns the screen
+  // off; picking it up turns it back on).
+  const poses = ["Flat on table", "Face down", "In hand", "In pocket"];
+  let pose = 0;
+  const poseBtn = document.createElement("button");
+  poseBtn.type = "button";
+  poseBtn.textContent = "Pose: " + poses[0];
+  poseBtn.addEventListener("click", () => {
+    pose = (pose + 1) % poses.length;
+    if (mod) mod._zs_web_pose(pose);
+    poseBtn.textContent = "Pose: " + poses[pose];
+    canvas.focus({ preventScroll: true });
+  });
+  appsEl.appendChild(poseBtn);
 
   render();
   requestAnimationFrame(frame);

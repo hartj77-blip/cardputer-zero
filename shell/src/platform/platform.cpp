@@ -127,7 +127,7 @@ int platform_run() {
         uint32_t ms = lv_timer_handler();
         // Sleep until the next LVGL timer is due or a key arrives, instead of
         // waking every few ms. Awake, keys are also read on LVGL's own timer.
-        uint32_t cap = g_low_power ? 2000 : 33;
+        uint32_t cap = g_low_power ? 500 : 33;   // 500: pickup wake reads the IMU while off
         if (ms == LV_NO_TIMER_READY || ms > cap) ms = cap;
         if (g_kb_fd >= 0) {
             pollfd p{g_kb_fd, POLLIN, 0};
@@ -227,6 +227,7 @@ EMSCRIPTEN_KEEPALIVE void zs_web_open(int index) {
 }
 // Pretend HDMI monitor for trying Dock mode in the browser.
 EMSCRIPTEN_KEEPALIVE void zs_web_hdmi(int connected) { mock_set_hdmi(connected != 0); }
+EMSCRIPTEN_KEEPALIVE void zs_web_pose(int pose) { mock_set_pose(pose); }
 EMSCRIPTEN_KEEPALIVE int zs_web_take_dirty() {
     int d = g_dirty;
     g_dirty = 0;
@@ -380,6 +381,7 @@ int platform_run_script(const std::string& script) {
         else if (cmd == "open") { drain_keys(); shell_open_app(arg); run_for(100); }
         else if (cmd == "home") { drain_keys(); shell_go_home(); run_for(100); }
         else if (cmd == "hdmi") { mock_set_hdmi(arg == "1"); run_for(100); }
+        else if (cmd == "pose") { mock_set_pose(std::atoi(arg.c_str())); run_for(100); }
         else if (cmd == "wait") run_for(uint32_t(std::atoi(arg.c_str())));
         else if (cmd == "shot") { drain_keys(); run_for(400); if (!save_ppm(arg)) ++failures; }
         else { std::fprintf(stderr, "unknown script step: %s\n", step.c_str()); ++failures; }

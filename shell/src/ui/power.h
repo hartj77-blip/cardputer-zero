@@ -7,6 +7,8 @@
 //                               UI stops redrawing; the first key only wakes
 //   Bluetooth on, nothing connected for bt_auto_off minutes -> Bluetooth off
 //   wifi_sleep on: Wi-Fi off after 10 minutes of screen off, back on at wake
+//   motion (IMU): picked up and tilted toward you -> screen on;
+//                 placed face down -> screen off at once
 //   battery <= 15% on battery power -> Saver profile until charged
 //   battery <= 3% on battery power  -> clean shutdown
 #pragma once
@@ -67,12 +69,19 @@ public:
     void set_wifi_sleep(bool on);
     void set_show_time_left(bool on);
 
+    // Motion sensor (needs the IMU; not on the Lite model).
+    bool wake_on_pickup() const { return wake_on_pickup_; }
+    bool sleep_face_down() const { return sleep_face_down_; }
+    void set_wake_on_pickup(bool on);
+    void set_sleep_face_down(bool on);
+
 private:
     enum class State { On, Dim, Off };
     void set_state(State s, uint32_t now_ms);
     void apply_cpu();
     void update_estimate(const BatteryInfo& b, uint32_t now_ms);
     void watch_dock(uint32_t now_ms);
+    void motion_tick(uint32_t now_ms);
     bool hdmi_was_ = false;
     uint32_t hdmi_lost_ = 0, last_dock_check_ = 0;
 
@@ -91,6 +100,18 @@ private:
     uint32_t avg_ms_ = 0;        // how long the average has been running
     bool was_external_ = false;
     int minutes_left_ = -1;
+
+    // Motion
+    bool wake_on_pickup_ = true, sleep_face_down_ = true;
+    int z_sign_ = 1;                         // +1 if az is +g lying face up (motion.z_sign)
+    float rest_x_ = 0, rest_y_ = 0, rest_z_ = 0;   // gravity when the screen went off
+    bool have_rest_ = false;
+    uint32_t face_down_since_ = 0;
+    bool face_down_off_ = false;             // we turned the screen off for face down
+    bool motion_woke_ = false;               // screen on by pickup, no key yet
+    uint32_t motion_woke_at_ = 0, pickup_paused_until_ = 0;
+    int false_wakes_ = 0;
+    uint32_t false_wake_window_ = 0;
 };
 
 inline Power& power() { return Power::get(); }

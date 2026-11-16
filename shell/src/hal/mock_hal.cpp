@@ -11,6 +11,7 @@
 namespace zs {
 namespace {
 bool g_hdmi = false;
+int g_pose = 0, g_pose_ticks = 0;   // see mock_set_pose
 
 class MockHal : public Hal {
 public:
@@ -48,7 +49,17 @@ public:
         s.heading_deg = std::fmod(312.0 + 20.0 * std::sin(t), 360.0);
         s.pitch_deg = 4.0f * std::sin(t * 1.3);
         s.roll_deg = -2.5f * std::cos(t * 0.9);
-        s.ax = 0.1f; s.ay = 0.05f; s.az = 9.79f;
+        // Gravity for the pretend pose; a short spin right after it changes.
+        switch (g_pose) {
+        case 1: s.ax = 0.1f; s.ay = -0.05f; s.az = -9.79f; break;   // face down
+        case 2: s.ax = 0.2f; s.ay = 6.3f; s.az = 7.5f; break;       // in hand, ~40 deg toward you
+        case 3: s.ax = 0.3f; s.ay = 9.7f; s.az = 0.8f; break;       // upright in a pocket
+        default: s.ax = 0.1f; s.ay = 0.05f; s.az = 9.79f; break;    // flat, face up
+        }
+        if (g_pose_ticks > 0) {
+            --g_pose_ticks;
+            s.gx = 90.0f;
+        }
         return s;
     }
 
@@ -342,6 +353,10 @@ private:
 }  // namespace
 
 void mock_set_hdmi(bool connected) { g_hdmi = connected; }
+void mock_set_pose(int pose) {
+    g_pose = pose;
+    g_pose_ticks = 3;
+}
 
 std::unique_ptr<Hal> make_mock_hal() { return std::make_unique<MockHal>(); }
 

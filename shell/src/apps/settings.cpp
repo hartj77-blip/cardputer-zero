@@ -60,6 +60,14 @@ public:
         switch_row(col, LV_SYMBOL_BATTERY_2 "  Time left in top bar", p.show_time_left(), [](lv_event_t* e) {
             power().set_show_time_left(lv_obj_has_state(lv_event_get_target_obj(e), LV_STATE_CHECKED));
         });
+        if (hal().imu().available) {
+            switch_row(col, LV_SYMBOL_UP "  Wake on pickup", p.wake_on_pickup(), [](lv_event_t* e) {
+                power().set_wake_on_pickup(lv_obj_has_state(lv_event_get_target_obj(e), LV_STATE_CHECKED));
+            });
+            switch_row(col, LV_SYMBOL_DOWN "  Screen off face down", p.sleep_face_down(), [](lv_event_t* e) {
+                power().set_sleep_face_down(lv_obj_has_state(lv_event_get_target_obj(e), LV_STATE_CHECKED));
+            });
+        }
 
         // Remote
         int ts = tailscale_mode() == "always" ? 1 : tailscale_mode() == "off" ? 2 : 0;

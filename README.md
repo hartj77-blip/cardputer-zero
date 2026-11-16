@@ -29,6 +29,7 @@ where the memory goes), **Settings** (Wi-Fi, Bluetooth, brightness, volume, mute
 and screen-off, Bluetooth auto-off, restart, shut down).
 
 The screen dims after 30 s idle and turns off after 1 minute on battery; the first key only wakes it.
+Placing it face down turns the screen off at once; picking it up turns it back on.
 
 ## Try it on a PC
 

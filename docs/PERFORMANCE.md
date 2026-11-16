@@ -41,7 +41,9 @@ by doing less while awake and almost nothing while the screen is off.
 | Wi-Fi off while the screen is off | off by default (after 10 min when on) | Settings → Wi-Fi off with screen |
 | Wi-Fi chip power save between beacons | on | `files/nm-wifi-powersave.conf` |
 | Main loop sleeps until the next timer or key, instead of waking every 5 ms | always | `platform.cpp` |
-| Screen off: keyboard and redraw timers stop; the loop wakes about every 2 s or on a key | always | `platform.cpp` |
+| Screen off: keyboard and redraw timers stop; the loop wakes every 0.5 s (to read the motion sensor) or on a key | always | `platform.cpp` |
+| Screen off as soon as it's placed face down (1.5 s) | on | Settings → Screen off face down |
+| Screen on when picked up and tilted toward you; off again after 8 s with no key; paused for 15 min after 3 such wakes in 5 min (a bag or pocket) | on | Settings → Wake on pickup |
 | Logs in RAM, background jobs off | always | step 1 |
 
 **Time left** in the top bar and the Battery app comes from our own average of

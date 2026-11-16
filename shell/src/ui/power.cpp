@@ -14,6 +14,16 @@ constexpr int kLowBattery = 15, kCriticalBattery = 3;
 constexpr uint32_t kWifiSleepAfterMs = 10 * 60 * 1000;
 constexpr double kNominalV = 3.7;        // for mAh -> mWh
 constexpr int kDesignMwh = 6475;         // 1750 mAh x 3.7 V
+// Motion. g = 9.81 m/s^2.
+constexpr float kFaceDownZ = -8.0f;      // screen facing the table
+constexpr uint32_t kFaceDownMs = 1500;   // held that long
+constexpr float kFacingYouZ = 3.0f;      // screen up enough to read (at most ~70 deg from flat)
+constexpr float kFlatZ = 9.3f;           // flatter than ~18 deg: put down, not picked up
+constexpr float kPickupDelta = 3.0f;     // m/s^2 change in gravity from rest (~18 deg)
+constexpr float kPickupGyro = 60.0f;     // deg/s
+constexpr uint32_t kPickupGraceMs = 8000;      // no key after a pickup wake: off again
+constexpr uint32_t kFalseWakeWindowMs = 5 * 60 * 1000;
+constexpr uint32_t kPickupPauseMs = 15 * 60 * 1000;   // 3 false wakes (a bag, a pocket): pause
 }  // namespace
 
 Power& Power::get() {
@@ -37,6 +47,9 @@ void Power::start() {
     bt_auto_off_min_ = prefs::get_int("bluetooth.auto_off", 10);
     wifi_sleep_ = prefs::get_int("wifi.sleep", 0) != 0;
     show_time_left_ = prefs::get_int("statusbar.time_left", 1) != 0;
+    wake_on_pickup_ = prefs::get_int("motion.wake", 1) != 0;
+    sleep_face_down_ = prefs::get_int("motion.face_down", 1) != 0;
+    z_sign_ = prefs::get_int("motion.z_sign", 1) < 0 ? -1 : 1;
     hal().set_brightness(brightness_);
     apply_cpu();
 }
@@ -78,6 +91,76 @@ void Power::set_bt_auto_off_min(int m) { bt_auto_off_min_ = m; prefs::set_int("b
 void Power::set_wifi_sleep(bool on) { wifi_sleep_ = on; prefs::set_int("wifi.sleep", on); }
 void Power::set_show_time_left(bool on) { show_time_left_ = on; prefs::set_int("statusbar.time_left", on); }
 
+void Power::set_wake_on_pickup(bool on) { wake_on_pickup_ = on; prefs::set_int("motion.wake", on); }
+void Power::set_sleep_face_down(bool on) { sleep_face_down_ = on; prefs::set_int("motion.face_down", on); }
+
+// Face down: screen off at once. Picked up (moved, and ending with the screen
+// tilted up toward you, not flat on a table) while dim or off: screen on. A pickup wake with no
+// key within 8 s turns the screen off again; three of those in 5 minutes (a
+// bag, a pocket, a car seat) pause pickup wake for 15 minutes.
+void Power::motion_tick(uint32_t now_ms) {
+    if (docked_ || (!wake_on_pickup_ && !sleep_face_down_)) return;
+    ImuSample m = hal().imu();
+    if (!m.available) return;
+    float x = m.ax, y = m.ay, z = m.az * float(z_sign_);
+    bool face_down = z < kFaceDownZ;
+
+    if (sleep_face_down_ && state_ != State::Off && face_down && !handoff_) {
+        if (!face_down_since_) face_down_since_ = now_ms;
+        if (now_ms - face_down_since_ >= kFaceDownMs) {
+            set_state(State::Off, now_ms);
+            face_down_off_ = true;
+            motion_woke_ = false;
+        }
+    } else if (!face_down) {
+        face_down_since_ = 0;
+    }
+
+    if (state_ == State::On) {
+        have_rest_ = false;
+        if (motion_woke_ && now_ms - motion_woke_at_ >= kPickupGraceMs) {
+            motion_woke_ = false;
+            set_state(State::Off, now_ms);
+            if (now_ms - false_wake_window_ > kFalseWakeWindowMs) {
+                false_wake_window_ = now_ms;
+                false_wakes_ = 0;
+            }
+            if (++false_wakes_ >= 3) {
+                pickup_paused_until_ = now_ms + kPickupPauseMs;
+                false_wakes_ = 0;
+            }
+        }
+        return;
+    }
+    // Dim or off: remember how it lies, wake when that changes toward you.
+    if (!have_rest_) {
+        rest_x_ = x, rest_y_ = y, rest_z_ = z;
+        have_rest_ = true;
+        return;
+    }
+    float dx = x - rest_x_, dy = y - rest_y_, dz = z - rest_z_;
+    float moved = std::sqrt(dx * dx + dy * dy + dz * dz);
+    float spin = std::sqrt(m.gx * m.gx + m.gy * m.gy + m.gz * m.gz);
+    bool facing_you = z > kFacingYouZ && z < kFlatZ;
+    bool paused = pickup_paused_until_ && int32_t(now_ms - pickup_paused_until_) < 0;
+    if (wake_on_pickup_ && !paused && facing_you && (moved > kPickupDelta || spin > kPickupGyro)) {
+        bool was_off = state_ == State::Off;
+        set_state(State::On, now_ms);
+        last_input_ = now_ms;
+        have_rest_ = false;
+        // Turned over from face down, or lifted from off: give it the grace
+        // period. From dim the user was just using it; treat it as a key.
+        motion_woke_ = was_off;
+        motion_woke_at_ = now_ms;
+        face_down_off_ = false;
+        return;
+    }
+    // Slow drift (sliding on a table): follow it so it doesn't add up.
+    if (moved < 0.5f) {
+        rest_x_ += 0.2f * dx, rest_y_ += 0.2f * dy, rest_z_ += 0.2f * dz;
+    }
+}
+
 void Power::set_state(State s, uint32_t now_ms) {
     if (s == state_) return;
     State old = state_;
@@ -109,6 +192,11 @@ bool Power::on_key(uint32_t now_ms) {
     if (docked_) return true;   // typing on the monitor; ZeroShell stays out of it
     last_input_ = now_ms;
     bool was_off = state_ == State::Off;
+    if (motion_woke_) {   // picked up and then used: a real wake
+        motion_woke_ = false;
+        false_wakes_ = 0;
+        was_off = false;  // the screen is already on; this key counts
+    }
     set_state(State::On, now_ms);
     return was_off || handoff_;   // the key that wakes the screen does nothing else
 }
@@ -194,6 +282,7 @@ void Power::tick(uint32_t now_ms) {
     watch_dock(now_ms);
     BatteryInfo b = h.battery();
     update_estimate(b, now_ms);
+    motion_tick(now_ms);
 
     // Screen: dim, then off. Plugged in: dim only, never off.
     uint32_t idle = now_ms - last_input_;

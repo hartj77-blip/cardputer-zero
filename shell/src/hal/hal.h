@@ -279,6 +279,8 @@ std::unique_ptr<Hal> make_linux_hal();
 
 // Simulator only: plug or unplug a pretend HDMI monitor.
 void mock_set_hdmi(bool connected);
+// Simulator only: 0 flat face up, 1 face down, 2 in hand, 3 upright in a pocket.
+void mock_set_pose(int pose);
 
 // Global accessor used by the UI.
 Hal& hal();

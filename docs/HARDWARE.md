@@ -45,6 +45,6 @@ Sources: [M5 CardputerZero docs](https://docs.m5stack.com/en/CardputerZero), M5'
 ## To confirm on hardware (Phase 1)
 
 - Exact names under `/sys/class/leds`, `/sys/class/backlight` and the iio devices.
-- IMU axis orientation and magnetometer calibration.
+- IMU axis orientation and magnetometer calibration. Motion wake assumes `in_accel_z` reads +1 g lying face up; if face down and pickup act the wrong way round, set `motion.z_sign=-1` in `~/.config/zeroos/settings.conf`.
 - Whether IR transmit works with the stock driver (one owner saw no output on a non-stock image).
 - Boot time and idle power with ZeroOS versus stock (stock: about 2.5 W idle).
