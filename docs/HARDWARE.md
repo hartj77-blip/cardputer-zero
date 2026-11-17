@@ -39,6 +39,12 @@ Sources: [M5 CardputerZero docs](https://docs.m5stack.com/en/CardputerZero), M5'
 | nexmon breaks onboard Wi-Fi | Purge `brcmfmac-nexmon-dkms` |
 | Wi-Fi region hard-coded to AE | `cfg80211.ieee80211_regdom` from `WIFI_COUNTRY` (default US) |
 | `/dev/spidev*` root-only | Create the `spi` group |
+| Volume and mute need PipeWire, which only runs in a login session | Linger for `pi`; ZeroShell starts after `user@1000`; `pipewire-alsa` so sox plays through it |
+| Speaker close to silent on first boot (WirePlumber default 0.064) | Default sink volume 0.216 (60%), as M5 ships |
+| Wrong Wi-Fi password stays saved and is retried | ZeroShell deletes the profile when a connect with a typed password fails |
+| `/dev/i2c-*` missing (M5 loads `i2c-dev` in a script we drop) | `/etc/modules-load.d/zeroos.conf` |
+| systemd-backlight restores the shutdown brightness at boot | Masked, as on M5's image; ZeroShell restores its own setting |
+| Kernel upgrade breaks the display and keyboard (modules are built for one kernel) | Inherited from M5's pi-gen: kernel packages pinned and held. Don't `apt-mark unhold` them |
 | No suspend or hibernate on the Pi kernel | Not fixable in Phase 0; plan for shutdown, show time left |
 | No kernel key repeat (DT lacks autorepeat) | ZeroShell repeats held keys itself; console repeat in Phase 1 |
 
