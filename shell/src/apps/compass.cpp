@@ -28,7 +28,7 @@ public:
 
         static const char* marks[] = {"N", "E", "S", "W"};
         for (int i = 0; i < 4; ++i) {
-            marks_[i] = label(dial_, marks[i], &lv_font_montserrat_16, i == 0 ? kBad : kMuted);
+            marks_[i] = label(dial_, marks[i], &zs_font_16, i == 0 ? kBad : kMuted);
         }
         needle_ = lv_line_create(dial_);
         lv_obj_set_style_line_width(needle_, 4, 0);
@@ -42,9 +42,9 @@ public:
         lv_obj_set_style_border_width(hub_, 0, 0);
         lv_obj_center(hub_);
 
-        heading_ = label(root, "---", &lv_font_montserrat_28);
+        heading_ = label(root, "---", &zs_font_28);
         lv_obj_set_pos(heading_, 160, 10);
-        card_ = label(root, "", &lv_font_montserrat_20, kAccent);
+        card_ = label(root, "", &zs_font_20, kAccent);
         lv_obj_set_pos(card_, 160, 44);
 
         // Level: bubble moves inside a ring.
@@ -64,7 +64,7 @@ public:
         lv_obj_set_style_border_width(bubble_, 0, 0);
         lv_obj_center(bubble_);
 
-        tilt_ = label(root, "", &lv_font_montserrat_12, kMuted);
+        tilt_ = label(root, "", &zs_font_12, kMuted);
         lv_obj_set_pos(tilt_, 160, 80);
         refresh();
     }

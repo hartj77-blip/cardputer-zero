@@ -120,7 +120,7 @@ private:
             lv_qrcode_update(qr, ts_.auth_url.c_str(), uint32_t(ts_.auth_url.size()));
             lv_obj_set_style_border_color(qr, c(0xffffff), 0);
             lv_obj_set_style_border_width(qr, 4, 0);
-            lv_obj_t* l = label(panel, "Scan to sign in", &lv_font_montserrat_12, kText);
+            lv_obj_t* l = label(panel, "Scan to sign in", &zs_font_12, kText);
             (void)l;
         } else {
             const char* head = !ts_.installed            ? "Not installed"
@@ -128,24 +128,24 @@ private:
                                : ts_.state == "Stopped" && !starting_ ? "Tailscale off"
                                : ts_.state == "NeedsLogin" ? "Signing in..."
                                : "Starting...";
-            label(panel, head, &lv_font_montserrat_16, ts_.state == "Running" ? kGood : kText);
+            label(panel, head, &zs_font_16, ts_.state == "Running" ? kGood : kText);
             if (ts_.state == "Running") {
                 kv_row(panel, "Name", ts_.self_name.c_str());
                 kv_row(panel, "IP", ts_.self_ip.c_str());
-                lv_obj_t* tn = label(panel, ts_.tailnet.c_str(), &lv_font_montserrat_12, kMuted);
+                lv_obj_t* tn = label(panel, ts_.tailnet.c_str(), &zs_font_12, kMuted);
                 lv_label_set_long_mode(tn, LV_LABEL_LONG_DOT);
                 lv_obj_set_width(tn, 136);
                 const std::string& send = remote_pending_send();
                 std::string hint = send.empty() ? "Enter: SSH\nD: desktop on monitor"
                                                 : "Send " + send.substr(send.rfind('/') + 1) + ":\npick a device";
-                lv_obj_t* h = label(panel, hint.c_str(), &lv_font_montserrat_12, send.empty() ? kMuted : kAccent);
+                lv_obj_t* h = label(panel, hint.c_str(), &zs_font_12, send.empty() ? kMuted : kAccent);
                 lv_label_set_long_mode(h, LV_LABEL_LONG_WRAP);
                 lv_obj_set_width(h, 136);
             } else {
                 lv_obj_t* h = label(panel,
                                     ts_.installed ? "Reach your PC, phone and servers from anywhere."
                                                   : "Tailscale comes with ZeroOS images.",
-                                    &lv_font_montserrat_12, kMuted);
+                                    &zs_font_12, kMuted);
                 lv_label_set_long_mode(h, LV_LABEL_LONG_WRAP);
                 lv_obj_set_width(h, 136);
             }
@@ -228,7 +228,7 @@ private:
         lv_obj_center(input_);
         lv_obj_set_style_border_color(input_, c(kAccent), 0);
         lv_obj_set_style_border_width(input_, 1, 0);
-        label(input_, title, &lv_font_montserrat_12, kMuted);
+        label(input_, title, &zs_font_12, kMuted);
         lv_obj_t* ta = lv_textarea_create(input_);
         lv_textarea_set_one_line(ta, true);
         lv_textarea_set_text(ta, initial.c_str());

@@ -37,9 +37,9 @@ public:
         g_pending_file.clear();
 
         std::string name = path_.substr(path_.find_last_of('/') + 1);
-        lv_obj_t* t = label(root, name.c_str(), &lv_font_montserrat_12, kAccent);
+        lv_obj_t* t = label(root, name.c_str(), &zs_font_12, kAccent);
         lv_obj_set_pos(t, 8, 3);
-        status_ = label(root, "", &lv_font_montserrat_12, kMuted);
+        status_ = label(root, "", &zs_font_12, kMuted);
         lv_obj_align(status_, LV_ALIGN_TOP_RIGHT, -8, 3);
 
         ta_ = lv_textarea_create(root);
@@ -47,7 +47,7 @@ public:
         lv_obj_set_size(ta_, kScreenW - 8, kContentH - 24);
         lv_obj_set_style_bg_color(ta_, c(kSurface), 0);
         lv_obj_set_style_border_width(ta_, 0, 0);
-        lv_obj_set_style_text_font(ta_, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(ta_, &zs_font_12, 0);
         lv_obj_set_style_pad_all(ta_, 6, 0);
         lv_obj_set_style_bg_color(ta_, c(kAccent), LV_PART_CURSOR | LV_STATE_FOCUSED);
 

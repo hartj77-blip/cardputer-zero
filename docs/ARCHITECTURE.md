@@ -12,7 +12,7 @@ ZeroOS is five layers. Each one only talks to the layer below it, so apps never 
 
 ## ZeroShell
 
-- **LVGL 9.2** (pinned), 16-bit color, Montserrat fonts built in. One binary, three backends chosen at
+- **LVGL 9.2** (pinned), 16-bit color, the Ubuntu typeface (`shell/src/fonts/`, made by `shell/tools/fonts.sh`). One binary, three backends chosen at
   build time: `sim` (SDL2 window), `device` (`/dev/fb0` + evdev keyboard), `headless` (renders to
   files, drives CI screenshots and smoke tests).
 - **Key routing.** The shell wraps the keypad driver, so every key press goes first to the current
@@ -21,6 +21,11 @@ ZeroOS is five layers. Each one only talks to the layer below it, so apps never 
 - **Apps** implement `zs::App` (`build`, `tick`, `on_key`, `on_back`) and are listed in
   `apps/registry.cpp`. Switching apps is deferred until the current key handler returns, so an app
   can safely open another app from its own handler.
+
+- **Look.** Ubuntu's desktop at 320x170: a black top bar (app name, date and time, status icons), a
+  home screen with a dock of five favourites and a paged app grid on the aubergine wallpaper, Yaru
+  dark colours with the orange accent in apps, notifications under the clock. Colours and fonts
+  live in `ui/theme.h`. The Terminal app's console uses Ubuntu's terminal colours.
 
 ## Hardware layer
 

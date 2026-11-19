@@ -132,7 +132,7 @@ private:
         lv_obj_set_style_pad_row(panel, 3, 0);
         uint32_t color;
         std::string head = headline(color);
-        label(panel, head.c_str(), &lv_font_montserrat_16, color);
+        label(panel, head.c_str(), &zs_font_16, color);
         if (st_.ready) {
             int online = 0;
             for (auto& d : st_.devices) online += d.connected;
@@ -144,7 +144,7 @@ private:
                            : !st_.requests.empty() ? "Enter: accept\nDel: ignore"
                            : st_.devices.empty() ? "Add this Cardputer in Syncthing on your PC or phone: Show my device ID."
                            : "Notes, Documents and Recordings stay the same everywhere.";
-        lv_obj_t* h = label(panel, hint, &lv_font_montserrat_12, st_.requests.empty() ? kMuted : kAccent);
+        lv_obj_t* h = label(panel, hint, &zs_font_12, st_.requests.empty() ? kMuted : kAccent);
         lv_label_set_long_mode(h, LV_LABEL_LONG_WRAP);
         lv_obj_set_width(h, 136);
 
@@ -245,11 +245,11 @@ private:
         std::string lines;
         for (size_t i = 0; i < st_.device_id.size(); i += 16)
             lines += st_.device_id.substr(i, 15) + "\n";
-        lv_obj_t* t = label(o, "This Cardputer's ID", &lv_font_montserrat_12, kMuted);
+        lv_obj_t* t = label(o, "This Cardputer's ID", &zs_font_12, kMuted);
         lv_obj_align(t, LV_ALIGN_TOP_LEFT, 128, 0);
-        lv_obj_t* id = label(o, lines.c_str(), &lv_font_montserrat_14, kText);
+        lv_obj_t* id = label(o, lines.c_str(), &zs_font_14, kText);
         lv_obj_align(id, LV_ALIGN_TOP_LEFT, 128, 18);
-        lv_obj_t* hint = label(o, "Syncthing: Add Remote Device. Esc closes.", &lv_font_montserrat_12, kMuted);
+        lv_obj_t* hint = label(o, "Syncthing: Add Remote Device. Esc closes.", &zs_font_12, kMuted);
         lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
         lv_obj_set_width(hint, 160);
         lv_obj_align(hint, LV_ALIGN_BOTTOM_LEFT, 128, 0);
@@ -263,7 +263,7 @@ private:
 
     void ask_id() {
         lv_obj_t* o = overlay(74);
-        label(o, "Device ID (from Syncthing: Actions > Show ID)", &lv_font_montserrat_12, kMuted);
+        label(o, "Device ID (from Syncthing: Actions > Show ID)", &zs_font_12, kMuted);
         lv_obj_t* ta = lv_textarea_create(o);
         lv_textarea_set_one_line(ta, true);
         lv_obj_set_width(ta, 288);

@@ -44,6 +44,7 @@ private:
     lv_obj_t* content_ = nullptr;
     lv_obj_t* sb_time_ = nullptr;
     lv_obj_t* sb_title_ = nullptr;
+    lv_obj_t* sb_home_ = nullptr;    // workspace pill, shown on the home screen
     lv_obj_t* sb_icons_ = nullptr;
     lv_obj_t* toast_ = nullptr;
     lv_obj_t* blank_ = nullptr;     // simulator only: stands in for the backlight

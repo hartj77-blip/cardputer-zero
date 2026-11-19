@@ -69,9 +69,9 @@ void Shell::start(lv_indev_t* keypad) {
         lv_indev_set_read_cb(keypad_, keypad_hook);
     }
 
-    // Dark theme with the orange accent for focus, sliders, cursors.
+    // Dark theme with Ubuntu orange for focus, sliders, cursors.
     lv_display_t* disp = lv_display_get_default();
-    lv_theme_t* th = lv_theme_default_init(disp, c(kAccent), c(0x58a6ff), true, &lv_font_montserrat_12);
+    lv_theme_t* th = lv_theme_default_init(disp, c(kAccent), c(kAccent), true, &zs_font_12);
     lv_display_set_theme(disp, th);
 
     screen_ = lv_screen_active();
@@ -89,14 +89,16 @@ void Shell::start(lv_indev_t* keypad) {
     lv_obj_remove_flag(content_, LV_OBJ_FLAG_SCROLLABLE);
 
     toast_ = lv_label_create(screen_);
+    // Notifications drop from under the clock, as on Ubuntu.
     lv_obj_set_style_bg_color(toast_, c(kSurface2), 0);
     lv_obj_set_style_bg_opa(toast_, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(toast_, 10, 0);
+    lv_obj_set_style_radius(toast_, 11, 0);
     lv_obj_set_style_pad_hor(toast_, 10, 0);
     lv_obj_set_style_pad_ver(toast_, 4, 0);
-    lv_obj_set_style_border_color(toast_, c(kAccent), 0);
+    lv_obj_set_style_border_color(toast_, c(0x5a5a5a), 0);
     lv_obj_set_style_border_width(toast_, 1, 0);
-    lv_obj_align(toast_, LV_ALIGN_BOTTOM_MID, 0, -6);
+    lv_obj_set_style_max_width(toast_, kScreenW - 16, 0);
+    lv_obj_align(toast_, LV_ALIGN_TOP_MID, 0, kStatusH + 4);
     lv_obj_add_flag(toast_, LV_OBJ_FLAG_HIDDEN);
 
     // Simulator stand-in for the backlight: a black layer over everything.
@@ -115,34 +117,46 @@ void Shell::start(lv_indev_t* keypad) {
     update_statusbar();
 }
 
+// Ubuntu's top bar: what's open on the left, date and time in the middle,
+// system status on the right.
 void Shell::build_statusbar() {
     lv_obj_t* bar = lv_obj_create(screen_);
     style_plain(bar);
     lv_obj_set_size(bar, kScreenW, kStatusH);
     lv_obj_set_pos(bar, 0, 0);
-    lv_obj_set_style_bg_color(bar, c(kSurface), 0);
+    lv_obj_set_style_bg_color(bar, c(kTopBar), 0);
     lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
-    lv_obj_set_style_pad_hor(bar, 6, 0);
+    lv_obj_set_style_pad_hor(bar, 7, 0);
     lv_obj_remove_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
 
-    sb_time_ = label(bar, "--:--", &lv_font_montserrat_12, kText);
-    lv_obj_align(sb_time_, LV_ALIGN_LEFT_MID, 0, 0);
+    sb_title_ = label(bar, "", &zs_font_12, kText);
+    lv_obj_align(sb_title_, LV_ALIGN_LEFT_MID, 0, 0);
 
-    sb_title_ = label(bar, "", &lv_font_montserrat_12, kAccent);
-    lv_obj_align(sb_title_, LV_ALIGN_CENTER, 0, 0);
+    // Home has no title: show GNOME's workspace pill instead.
+    sb_home_ = lv_obj_create(bar);
+    style_plain(sb_home_);
+    lv_obj_set_size(sb_home_, 26, 6);
+    lv_obj_align(sb_home_, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_remove_flag(sb_home_, LV_OBJ_FLAG_SCROLLABLE);
+    for (int i = 0; i < 2; ++i) {
+        lv_obj_t* d = lv_obj_create(sb_home_);
+        style_plain(d);
+        lv_obj_set_size(d, i == 0 ? 16 : 6, 6);
+        lv_obj_set_pos(d, i == 0 ? 0 : 20, 0);
+        lv_obj_set_style_radius(d, 3, 0);
+        lv_obj_set_style_bg_color(d, c(i == 0 ? kText : 0x6e6e6e), 0);
+        lv_obj_set_style_bg_opa(d, LV_OPA_COVER, 0);
+    }
 
-    sb_icons_ = label(bar, "", &lv_font_montserrat_12, kText);
+    sb_time_ = label(bar, "--:--", &zs_font_12, kText);
+    lv_obj_align(sb_time_, LV_ALIGN_CENTER, 0, 0);
+
+    sb_icons_ = label(bar, "", &zs_font_12, kText);
     lv_obj_align(sb_icons_, LV_ALIGN_RIGHT_MID, 0, 0);
 }
 
 void Shell::update_statusbar() {
     char buf[96];
-    time_t now = time(nullptr);
-    tm lt{};
-    localtime_r(&now, &lt);
-    strftime(buf, sizeof buf, "%H:%M", &lt);
-    lv_label_set_text(sb_time_, buf);
-
     auto& h = hal();
     BatteryInfo b = h.battery();
     NetStatus n = h.net();
@@ -167,13 +181,39 @@ void Shell::update_statusbar() {
         icons += buf;
     }
     lv_label_set_text(sb_icons_, icons.c_str());
-    // Too many icons: hide the app title rather than draw over it.
+    lv_obj_set_style_text_color(sb_icons_, c(b.percent >= 0 && b.percent < 15 && !b.charging ? kBad : kText), 0);
+
+    bool home = app_id_ == "home";
+    if (home) lv_obj_remove_flag(sb_home_, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(sb_home_, LV_OBJ_FLAG_HIDDEN);
+
+    // The clock gives way as the bar fills: first it drops the date, then it
+    // moves next to the status icons, and last it takes the title's place.
+    time_t now = time(nullptr);
+    tm lt{};
+    localtime_r(&now, &lt);
     lv_obj_update_layout(sb_icons_);
     lv_obj_update_layout(sb_title_);
-    bool clash = lv_obj_get_x(sb_title_) + lv_obj_get_width(sb_title_) + 6 > lv_obj_get_x(sb_icons_);
-    if (clash) lv_obj_add_flag(sb_title_, LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_remove_flag(sb_title_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_style_text_color(sb_icons_, c(b.percent >= 0 && b.percent < 15 && !b.charging ? kBad : kText), 0);
+    const int gap = 8;
+    int left_end = home ? 26 : lv_obj_get_width(sb_title_);
+    int right_start = lv_obj_get_x(sb_icons_);
+    auto fits = [&](const char* f) {
+        strftime(buf, sizeof buf, f, &lt);
+        lv_label_set_text(sb_time_, buf);
+        lv_obj_align(sb_time_, LV_ALIGN_CENTER, 0, 0);
+        lv_obj_update_layout(sb_time_);
+        int x = lv_obj_get_x(sb_time_);
+        return x >= left_end + gap && x + lv_obj_get_width(sb_time_) + gap <= right_start;
+    };
+    bool title = true;
+    if (!fits("%b %-d  %H:%M") && !fits("%H:%M")) {
+        int x = right_start - gap - lv_obj_get_width(sb_time_);
+        title = x >= left_end + gap;
+        lv_obj_align(sb_time_, LV_ALIGN_LEFT_MID, title ? x : 0, 0);
+    }
+    if (title || home) lv_obj_remove_flag(sb_title_, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(sb_title_, LV_OBJ_FLAG_HIDDEN);
+    if (!title && home) lv_obj_add_flag(sb_home_, LV_OBJ_FLAG_HIDDEN);
 }
 
 void Shell::tick_cb(lv_timer_t* t) {

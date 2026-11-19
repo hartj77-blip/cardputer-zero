@@ -29,8 +29,8 @@ public:
 struct AppInfo {
     std::string id;
     std::string name;
-    const char* symbol;       // LV_SYMBOL_*
-    uint32_t color;           // tile accent, 0xRRGGBB
+    const char* symbol;       // LV_SYMBOL_* or ZS_ICON_*
+    uint32_t color;           // icon background, 0xRRGGBB
     std::function<std::unique_ptr<App>()> make;
 };
 

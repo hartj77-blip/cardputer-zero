@@ -5,14 +5,14 @@
 <style>
 /* Layout: a handheld body (screen over keys) centred on a dark bench; notes beside it on wide screens, below on phones. */
 :root {
-  --bench: #0d1014;
-  --shell: #1d232b;
-  --shell-edge: #2c3540;
-  --key: #2a323c;
-  --key-down: #ff8a1f;
-  --ink: #e6edf3;
-  --muted: #8b97a5;
-  --accent: #ff8a1f;
+  --bench: #1a0012;
+  --shell: #262626;
+  --shell-edge: #3a3a3a;
+  --key: #333333;
+  --key-down: #e95420;
+  --ink: #f7f7f7;
+  --muted: #aea79f;
+  --accent: #e95420;
   --font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
   --font-body: "Inter", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -43,9 +43,9 @@ body {
 canvas {
   width: 100%; aspect-ratio: 320 / 170; max-width: 100%;
   image-rendering: pixelated; image-rendering: crisp-edges;
-  border-radius: 3px; display: block; background: #0b0f14; outline: none;
+  border-radius: 3px; display: block; background: #1e1e1e; outline: none;
 }
-.bezel-label { display: flex; justify-content: space-between; font: 500 10px/1 var(--font-mono); color: #5b6673; letter-spacing: 0.08em; text-transform: uppercase; }
+.bezel-label { display: flex; justify-content: space-between; font: 500 10px/1 var(--font-mono); color: #8a837c; letter-spacing: 0.08em; text-transform: uppercase; }
 .loading { position: relative; }
 .loading::after {
   content: "Booting ZeroOS…"; position: absolute; inset: 0; display: grid; place-items: center;
@@ -64,14 +64,14 @@ button.k {
   appearance: none; border: 0; border-radius: 7px; min-height: 38px; padding: 0;
   background: var(--key); color: var(--ink);
   font: 500 14px/1 var(--font-mono);
-  box-shadow: 0 2px 0 #12161b; cursor: pointer;
+  box-shadow: 0 2px 0 #141414; cursor: pointer;
   transition: background 60ms, transform 60ms;
 }
 button.k.wide2 { grid-column: span 2; } button.k.wide4 { grid-column: span 4; }
 button.k.mod { color: var(--muted); font-size: 12px; }
 button.k.mod.on { color: var(--accent); }
-button.k.ok { background: #3a2a1a; color: var(--accent); }
-button.k.down, button.k:active { background: var(--key-down); color: #111; transform: translateY(1px); box-shadow: none; }
+button.k.ok { background: #4a2313; color: var(--accent); }
+button.k.down, button.k:active { background: var(--key-down); color: #fff; transform: translateY(1px); box-shadow: none; }
 button.k:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 @media (max-width: 520px) {
   .controls { grid-template-columns: 1fr; }
@@ -95,7 +95,7 @@ dd { margin: 0; color: var(--muted); align-self: center; }
 }
 .apps button:hover, .apps button:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
 .apps button.on { border-color: var(--accent); color: var(--accent); }
-.fine { font-size: 12px; color: #6b7682; line-height: 1.5; margin: 0; }
+.fine { font-size: 12px; color: #8a837c; line-height: 1.5; margin: 0; }
 </style>
 
 <div class="wrap">

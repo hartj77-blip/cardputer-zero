@@ -12,9 +12,9 @@ class SysmonApp : public App {
 public:
     void build(lv_obj_t* root) override {
         root_ = root;
-        tab_ = label(root, "", &lv_font_montserrat_12, kMuted);
+        tab_ = label(root, "", &zs_font_12, kMuted);
         lv_obj_set_pos(tab_, 8, 2);
-        sim_ = label(root, "", &lv_font_montserrat_12, kWarn);
+        sim_ = label(root, "", &zs_font_12, kWarn);
         lv_obj_align(sim_, LV_ALIGN_TOP_RIGHT, -8, 2);
         show(0);
     }
@@ -61,7 +61,7 @@ private:
         cpu_bar_ = thin_bar(left_, 136, 5, kAccent);
         clock_ = kv_row(left_, "Clock", "");
         mem_ = kv_row(left_, "Memory", "");
-        mem_bar_ = thin_bar(left_, 136, 5, 0x58a6ff);
+        mem_bar_ = thin_bar(left_, 136, 5, kInfo);
         disk_ = kv_row(left_, "Storage", "");
         disk_bar_ = thin_bar(left_, 136, 5, kGood);
         temp_ = kv_row(left_, "CPU temp", "");
@@ -72,7 +72,7 @@ private:
         host_ = kv_row(right_, "Host", "");
         ip_ = kv_row(right_, "IP", "");
         up_ = kv_row(right_, "Uptime", "");
-        kernel_ = label(right_, "", &lv_font_montserrat_12, kMuted);
+        kernel_ = label(right_, "", &zs_font_12, kMuted);
         lv_label_set_long_mode(kernel_, LV_LABEL_LONG_DOT);
         lv_obj_set_width(kernel_, 140);
     }
@@ -80,7 +80,7 @@ private:
     void build_memory() {
         left_ = panel(6, 150);
         ram_ = kv_row(left_, "RAM used", "");
-        ram_bar_ = thin_bar(left_, 136, 5, 0x58a6ff);
+        ram_bar_ = thin_bar(left_, 136, 5, kInfo);
         avail_ = kv_row(left_, "Available", "");
         cache_ = kv_row(left_, "File cache", "");
         zram_ = kv_row(left_, "zram", "");
@@ -88,7 +88,7 @@ private:
         self_ = kv_row(left_, "This UI", "");
 
         right_ = panel(162, 152);
-        label(right_, "Biggest processes", &lv_font_montserrat_12, kMuted);
+        label(right_, "Biggest processes", &zs_font_12, kMuted);
         for (auto& r : procs_) r = kv_row(right_, "", "");
     }
 
