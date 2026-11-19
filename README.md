@@ -4,6 +4,7 @@ A custom OS for the [M5Stack Cardputer Zero](https://docs.m5stack.com/en/Cardput
 computer built on a Raspberry Pi CM0 (4x Cortex-A53, 512 MB RAM, 320x170 screen, 46-key keyboard).
 
 ZeroOS is a lean Debian (trixie, arm64) image with its own keyboard-driven home screen, **ZeroShell**,
+styled after the Ubuntu desktop (top bar, dock, app grid, Yaru dark colours, the Ubuntu typeface),
 and one hardware layer that covers every part of the board: battery gauge, motion sensors, IR,
 radios, audio, camera, real-time clock, key LEDs and the expansion ports.
 
@@ -42,6 +43,7 @@ cmake --build build/sim -j
 ```
 
 Keys: arrows move, **Enter** opens, **Esc** or **`** goes back, letters jump to an app on the home screen.
+On the home screen, **Left** from the first column moves into the dock, and **1** to **5** open the dock's apps.
 Inside apps: **R** rescans Wi-Fi, **L** learns an IR code **Space** pauses music or runs the stopwatch, **N** skips a track, **R** records a voice note. Notes save when you leave.
 
 Or build the browser version (same code, WebAssembly, one HTML file with on-screen keys):

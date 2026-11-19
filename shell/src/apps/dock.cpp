@@ -54,7 +54,7 @@ private:
         lv_obj_set_flex_flow(panel, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_style_pad_row(panel, 3, 0);
 
-        headline_ = label(panel, "", &lv_font_montserrat_16, docked_ ? kGood : kText);
+        headline_ = label(panel, "", &zs_font_16, docked_ ? kGood : kText);
         monitor_ = kv_row(panel, "Monitor", "");
         mem_ = kv_row(panel, "Free memory", "");
         if (docked_) {
@@ -62,10 +62,10 @@ private:
                                    "The keyboard now types on the monitor.\n"
                                    "Leave from the monitor's top bar, or\n"
                                    "unplug the monitor.",
-                                   &lv_font_montserrat_12, kMuted);
+                                   &zs_font_12, kMuted);
             lv_obj_set_width(hint, 290);
         } else {
-            hint_ = label(panel, "", &lv_font_montserrat_12, kMuted);
+            hint_ = label(panel, "", &zs_font_12, kMuted);
             lv_label_set_long_mode(hint_, LV_LABEL_LONG_WRAP);
             lv_obj_set_width(hint_, 136);
             build_controls();

@@ -44,7 +44,7 @@ void style_focus_list(lv_obj_t* list) {
         lv_obj_set_style_pad_hor(b, 8, 0);
         lv_obj_set_style_border_width(b, 0, 0);
         lv_obj_set_style_bg_color(b, c(kAccent), LV_STATE_FOCUSED);
-        lv_obj_set_style_text_color(b, c(0x000000), LV_STATE_FOCUSED);
+        lv_obj_set_style_text_color(b, c(kOnAccent), LV_STATE_FOCUSED);
         lv_obj_set_style_outline_width(b, 0, LV_STATE_FOCUS_KEY);
     }
 }

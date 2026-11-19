@@ -12,9 +12,9 @@ lv_obj_t* kv_row(lv_obj_t* parent, const char* key, const char* value) {
     style_plain(row);
     lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_remove_flag(row, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t* k = label(row, key, &lv_font_montserrat_12, kMuted);
+    lv_obj_t* k = label(row, key, &zs_font_12, kMuted);
     lv_obj_align(k, LV_ALIGN_LEFT_MID, 0, 0);
-    lv_obj_t* v = label(row, value, &lv_font_montserrat_12, kText);
+    lv_obj_t* v = label(row, value, &zs_font_12, kText);
     lv_obj_align(v, LV_ALIGN_RIGHT_MID, 0, 0);
     return v;
 }

@@ -33,7 +33,7 @@ public:
         // Tabs
         for (int i = 0; i < 2; ++i) {
             tabs_[i] = label(root, i == 0 ? LV_SYMBOL_AUDIO "  Music" : LV_SYMBOL_AUDIO "  Voice notes",
-                             &lv_font_montserrat_12, kMuted);
+                             &zs_font_12, kMuted);
             lv_obj_set_pos(tabs_[i], i == 0 ? 10 : 84, 3);
         }
         tab_line_ = lv_obj_create(root);
@@ -49,13 +49,13 @@ public:
         lv_obj_set_size(panel_, kScreenW - kListW - 14, kContentH - 12);
         lv_obj_remove_flag(panel_, LV_OBJ_FLAG_SCROLLABLE);
 
-        state_ = label(panel_, "", &lv_font_montserrat_12, kMuted);
+        state_ = label(panel_, "", &zs_font_12, kMuted);
         lv_obj_set_pos(state_, 0, 0);
-        title_ = label(panel_, "", &lv_font_montserrat_14, kText);
+        title_ = label(panel_, "", &zs_font_14, kText);
         lv_obj_set_width(title_, kScreenW - kListW - 26);
         lv_label_set_long_mode(title_, LV_LABEL_LONG_DOT);
         lv_obj_set_pos(title_, 0, 16);
-        artist_ = label(panel_, "", &lv_font_montserrat_12, kMuted);
+        artist_ = label(panel_, "", &zs_font_12, kMuted);
         lv_obj_set_width(artist_, kScreenW - kListW - 26);
         lv_label_set_long_mode(artist_, LV_LABEL_LONG_DOT);
         lv_obj_set_pos(artist_, 0, 34);
@@ -72,9 +72,9 @@ public:
         progress_ = thin_bar(panel_, kScreenW - kListW - 26, 5, kAccent);
         lv_obj_set_pos(progress_, 0, 88);
         lv_bar_set_range(progress_, 0, 1000);
-        time_ = label(panel_, "", &lv_font_montserrat_12, kMuted);
+        time_ = label(panel_, "", &zs_font_12, kMuted);
         lv_obj_set_pos(time_, 0, 95);
-        hint_ = label(panel_, "", &lv_font_montserrat_12, kMuted);
+        hint_ = label(panel_, "", &zs_font_12, kMuted);
         lv_obj_align(hint_, LV_ALIGN_BOTTOM_LEFT, 0, 0);
 
         show_tab(0);

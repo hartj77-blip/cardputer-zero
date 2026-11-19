@@ -26,11 +26,11 @@ public:
         if (powered_here_) hal().set_ext_power(true);
         opened_ = std::time(nullptr);
 
-        status_ = label(root, "", &lv_font_montserrat_12, kMuted);
+        status_ = label(root, "", &zs_font_12, kMuted);
         lv_obj_set_pos(status_, 8, 4);
-        lat_ = label(root, "", &lv_font_montserrat_16, kText);
+        lat_ = label(root, "", &zs_font_16, kText);
         lv_obj_set_pos(lat_, 8, 22);
-        lon_ = label(root, "", &lv_font_montserrat_16, kText);
+        lon_ = label(root, "", &zs_font_16, kText);
         lv_obj_set_pos(lon_, 8, 42);
 
         lv_obj_t* panel = lv_obj_create(root);
@@ -45,8 +45,8 @@ public:
             lv_obj_t* r = lv_obj_create(panel);
             lv_obj_remove_style_all(r);
             lv_obj_set_size(r, 140, 18);
-            label(r, k, &lv_font_montserrat_12, kMuted);
-            lv_obj_t* v = label(r, "-", &lv_font_montserrat_12, kText);
+            label(r, k, &zs_font_12, kMuted);
+            lv_obj_t* v = label(r, "-", &zs_font_12, kText);
             lv_obj_align(v, LV_ALIGN_RIGHT_MID, 0, 0);
             return v;
         };
@@ -56,7 +56,7 @@ public:
         acc_ = row("Accuracy");
         sats_ = row("Satellites");
         time_ = row("UTC");
-        hint_ = label(root, "Enter: save spot", &lv_font_montserrat_12, kMuted);
+        hint_ = label(root, "Enter: save spot", &zs_font_12, kMuted);
         lv_obj_align(hint_, LV_ALIGN_TOP_RIGHT, -8, 4);
         update();
     }
@@ -98,12 +98,12 @@ private:
             lv_label_set_text(status_, waited < 6 ? "Starting GPS..." : "No GPS found");
             lv_label_set_text(lat_, waited < 6 ? "" : "Plug in a Cap LoRa-1262 or");
             lv_label_set_text(lon_, waited < 6 ? "" : "a Grove GPS unit (power off first)");
-            lv_obj_set_style_text_font(lat_, &lv_font_montserrat_12, 0);
-            lv_obj_set_style_text_font(lon_, &lv_font_montserrat_12, 0);
+            lv_obj_set_style_text_font(lat_, &zs_font_12, 0);
+            lv_obj_set_style_text_font(lon_, &zs_font_12, 0);
             return;
         }
-        lv_obj_set_style_text_font(lat_, &lv_font_montserrat_16, 0);
-        lv_obj_set_style_text_font(lon_, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_font(lat_, &zs_font_16, 0);
+        lv_obj_set_style_text_font(lon_, &zs_font_16, 0);
         const char* st = fix_.mode >= 3 ? LV_SYMBOL_GPS " 3D fix" : fix_.mode == 2 ? LV_SYMBOL_GPS " 2D fix"
                                                                                     : "Looking for satellites...";
         lv_label_set_text(status_, st);

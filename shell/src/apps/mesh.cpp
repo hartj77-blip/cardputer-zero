@@ -84,8 +84,8 @@ private:
             lv_qrcode_update(qr, st_.web_url.c_str(), uint32_t(st_.web_url.size()));
             lv_obj_set_style_border_color(qr, c(0xffffff), 0);
             lv_obj_set_style_border_width(qr, 4, 0);
-            label(panel, "Scan to chat", &lv_font_montserrat_12, kText);
-            lv_obj_t* a = label(panel, ("App: " + st_.api).c_str(), &lv_font_montserrat_12, kMuted);
+            label(panel, "Scan to chat", &zs_font_12, kText);
+            lv_obj_t* a = label(panel, ("App: " + st_.api).c_str(), &zs_font_12, kMuted);
             lv_label_set_long_mode(a, LV_LABEL_LONG_DOT);
             lv_obj_set_width(a, 136);
         } else {
@@ -95,12 +95,12 @@ private:
                                : starting_   ? "Starting..."
                                              : "Mesh off";
             lv_obj_set_flex_align(panel, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-            label(panel, head, &lv_font_montserrat_16, st_.running && st_.no_radio ? kBad : kText);
+            label(panel, head, &zs_font_16, st_.running && st_.no_radio ? kBad : kText);
             const char* hint = !st_.installed ? "meshtasticd comes with ZeroOS images."
                                : st_.no_radio ? "Plug in the Cap LoRa-1262 with the power off, then turn the mesh on."
                                : st_.running ? "Connect to Wi-Fi to chat from your phone."
                                              : "Text over LoRa radio, miles away, with no signal or internet.";
-            lv_obj_t* h = label(panel, hint, &lv_font_montserrat_12, kMuted);
+            lv_obj_t* h = label(panel, hint, &zs_font_12, kMuted);
             lv_label_set_long_mode(h, LV_LABEL_LONG_WRAP);
             lv_obj_set_width(h, 136);
         }
@@ -152,7 +152,7 @@ private:
     void build_chat() {
         std::string head = st_.my_name.empty() ? std::string("Mesh") : st_.my_name;
         head += fmt("  |  %d nodes  |  Tab: info", st_.nodes);
-        lv_obj_t* h = label(root_, head.c_str(), &lv_font_montserrat_12, kMuted);
+        lv_obj_t* h = label(root_, head.c_str(), &zs_font_12, kMuted);
         lv_obj_set_pos(h, 8, 2);
 
         chat_ = lv_obj_create(root_);
@@ -194,14 +194,14 @@ private:
         auto msgs = hal().mesh_messages();
         size_t first = msgs.size() > 30 ? msgs.size() - 30 : 0;   // keep the screen light
         if (msgs.empty()) {
-            label(chat_, "No messages yet. Say hello!", &lv_font_montserrat_12, kMuted);
+            label(chat_, "No messages yet. Say hello!", &zs_font_12, kMuted);
         }
         for (size_t i = first; i < msgs.size(); ++i) {
             const MeshMessage& m = msgs[i];
             std::string who = m.mine ? "You" : m.from + (m.direct ? " (to you)" : "");
             lv_obj_t* l = lv_label_create(chat_);
             lv_label_set_text(l, (who + ": " + m.text).c_str());
-            lv_obj_set_style_text_font(l, &lv_font_montserrat_12, 0);
+            lv_obj_set_style_text_font(l, &zs_font_12, 0);
             lv_obj_set_style_text_color(l, c(m.mine ? kGood : m.direct ? kAccent : kText), 0);
             lv_label_set_long_mode(l, LV_LABEL_LONG_WRAP);
             lv_obj_set_width(l, kScreenW - 24);

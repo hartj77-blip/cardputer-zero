@@ -42,9 +42,9 @@ private:
         NetStatus st = hal().net();
 
         lv_obj_t* hdr = label(root_, st.wifi_connected ? ("Connected to " + st.wifi_ssid).c_str() : "Not connected",
-                              &lv_font_montserrat_12, st.wifi_connected ? kGood : kMuted);
+                              &zs_font_12, st.wifi_connected ? kGood : kMuted);
         lv_obj_set_pos(hdr, 8, 4);
-        lv_obj_t* hint = label(root_, "R rescan", &lv_font_montserrat_12, kMuted);
+        lv_obj_t* hint = label(root_, "R rescan", &zs_font_12, kMuted);
         lv_obj_align(hint, LV_ALIGN_TOP_RIGHT, -8, 4);
 
         lv_obj_t* list = make_list(root_, 4, 22, kScreenW - 8, kContentH - 26);
@@ -76,7 +76,7 @@ private:
         pw_page_ = lv_obj_create(root_);
         style_plain(pw_page_);
         lv_obj_set_size(pw_page_, kScreenW, kContentH);
-        lv_obj_t* t = label(pw_page_, ("Password for " + n.ssid).c_str(), &lv_font_montserrat_14);
+        lv_obj_t* t = label(pw_page_, ("Password for " + n.ssid).c_str(), &zs_font_14);
         lv_obj_set_pos(t, 10, 10);
         ta_ = lv_textarea_create(pw_page_);
         lv_textarea_set_one_line(ta_, true);
@@ -87,7 +87,7 @@ private:
         lv_obj_set_style_border_color(ta_, c(kAccent), 0);
         lv_obj_add_event_cb(ta_, on_submit, LV_EVENT_READY, this);
         shell_add_focus(ta_);
-        lv_obj_t* h = label(pw_page_, "Enter to connect   ` or Esc to go back", &lv_font_montserrat_12, kMuted);
+        lv_obj_t* h = label(pw_page_, "Enter to connect   ` or Esc to go back", &zs_font_12, kMuted);
         lv_obj_set_pos(h, 10, 90);
     }
 

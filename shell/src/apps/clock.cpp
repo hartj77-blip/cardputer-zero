@@ -11,9 +11,9 @@ using namespace theme;
 class ClockApp : public App {
 public:
     void build(lv_obj_t* root) override {
-        time_ = label(root, "", &lv_font_montserrat_28);
+        time_ = label(root, "", &zs_font_28);
         lv_obj_align(time_, LV_ALIGN_TOP_MID, 0, 14);
-        date_ = label(root, "", &lv_font_montserrat_14, kMuted);
+        date_ = label(root, "", &zs_font_14, kMuted);
         lv_obj_align(date_, LV_ALIGN_TOP_MID, 0, 50);
 
         lv_obj_t* sw = lv_obj_create(root);
@@ -21,11 +21,11 @@ public:
         lv_obj_set_size(sw, 220, 58);
         lv_obj_align(sw, LV_ALIGN_BOTTOM_MID, 0, -8);
         lv_obj_remove_flag(sw, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_t* t = label(sw, LV_SYMBOL_BELL "  Stopwatch", &lv_font_montserrat_12, kMuted);
+        lv_obj_t* t = label(sw, LV_SYMBOL_BELL "  Stopwatch", &zs_font_12, kMuted);
         lv_obj_align(t, LV_ALIGN_TOP_LEFT, 0, 0);
-        sw_ = label(sw, "00:00.0", &lv_font_montserrat_20, kAccent);
+        sw_ = label(sw, "00:00.0", &zs_font_20, kAccent);
         lv_obj_align(sw_, LV_ALIGN_BOTTOM_LEFT, 0, 0);
-        lv_obj_t* h = label(sw, "Space start/stop\nR reset", &lv_font_montserrat_12, kMuted);
+        lv_obj_t* h = label(sw, "Space start/stop\nR reset", &zs_font_12, kMuted);
         lv_obj_align(h, LV_ALIGN_RIGHT_MID, 0, 0);
         tick();
     }

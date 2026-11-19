@@ -3,6 +3,14 @@
 # command (e.g. "ssh desktop") in a new window first.
 cd "$HOME" || exit 1
 export TERM=linux
+# Ubuntu's terminal colours: aubergine background, Tango palette.
+i=0
+for rgb in 300a24 cc0000 4e9a06 c4a000 3465a4 75507b 06989a d3d7cf \
+           555753 ef2929 8ae234 fce94f 729fcf ad7fa8 34e2e2 eeeeec; do
+    printf '\033]P%x%s' "$i" "$rgb"
+    i=$((i + 1))
+done
+printf '\033[2J\033[H'
 cmdfile="$HOME/.cache/zeroos/terminal-cmd"
 cmd=$(cat "$cmdfile" 2>/dev/null); rm -f "$cmdfile"
 cmd=$(printf '%s' "$cmd" | sed 's/^ *//; s/ *$//')

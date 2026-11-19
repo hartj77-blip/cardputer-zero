@@ -22,19 +22,19 @@ public:
         lv_obj_remove_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_flex_flow(panel, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_style_pad_row(panel, 4, 0);
-        label(panel, LV_SYMBOL_KEYBOARD "  Terminal", &lv_font_montserrat_16, kAccent);
+        label(panel, LV_SYMBOL_KEYBOARD "  Terminal", &zs_font_16, kAccent);
         lv_obj_t* help = label(panel,
                                "Enter opens a terminal on this screen (53 x 14).\n"
                                "Alt+`  or  exit  comes back here. Sessions keep\n"
                                "running in tmux; open it again to pick up.\n"
                                "Remote has your devices, for one-key SSH.",
-                               &lv_font_montserrat_12, kMuted);
+                               &zs_font_12, kMuted);
         lv_obj_set_width(help, 290);
         lv_obj_t* b = lv_button_create(panel);
         lv_obj_set_size(b, 160, 26);
         lv_obj_set_style_bg_color(b, c(kSurface2), 0);
         lv_obj_set_style_bg_color(b, c(kAccent), LV_STATE_FOCUSED);
-        lv_obj_set_style_text_color(b, c(0x000000), LV_STATE_FOCUSED);
+        lv_obj_set_style_text_color(b, c(kOnAccent), LV_STATE_FOCUSED);
         lv_obj_t* l = lv_label_create(b);
         lv_label_set_text(l, LV_SYMBOL_PLAY "  Open terminal");
         lv_obj_center(l);
@@ -71,14 +71,25 @@ private:
         fake_ = lv_obj_create(root_);
         style_plain(fake_);
         lv_obj_set_size(fake_, kScreenW, kContentH);
-        lv_obj_set_style_bg_color(fake_, c(0x000000), 0);
+        lv_obj_set_style_bg_color(fake_, c(kTerminalBg), 0);
         lv_obj_set_style_bg_opa(fake_, LV_OPA_COVER, 0);
         lv_obj_set_style_pad_all(fake_, 6, 0);
-        std::string text = "pi@cardputer:~$ " + cmd + (cmd.empty() ? "_" : "") +
-                           "\n\n[simulator] On the Cardputer this is a real\n"
-                           "Linux terminal running tmux. Alt+` or exit\n"
-                           "comes back. Esc closes this preview.";
-        lv_obj_t* l = label(fake_, text.c_str(), &lv_font_montserrat_12, kGood);
+        // Ubuntu's prompt colours: green user@host, blue path.
+        lv_obj_t* prompt = lv_obj_create(fake_);
+        style_plain(prompt);
+        lv_obj_set_size(prompt, 300, LV_SIZE_CONTENT);
+        lv_obj_set_flex_flow(prompt, LV_FLEX_FLOW_ROW);
+        lv_obj_set_style_pad_column(prompt, 0, 0);
+        label(prompt, "pi@cardputer", &zs_font_12, 0x8ae234);
+        label(prompt, ":", &zs_font_12, 0xffffff);
+        label(prompt, "~", &zs_font_12, 0x729fcf);
+        label(prompt, ("$ " + cmd + (cmd.empty() ? "_" : "")).c_str(), &zs_font_12, 0xffffff);
+        lv_obj_t* l = label(fake_,
+                            "[simulator] On the Cardputer this is a real\n"
+                            "Linux terminal running tmux. Alt+` or exit\n"
+                            "comes back. Esc closes this preview.",
+                            &zs_font_12, 0xffffff);
+        lv_obj_set_pos(l, 0, 30);
         lv_obj_set_width(l, 300);
     }
 

@@ -94,11 +94,11 @@ private:
 
         std::string shown = cwd_;
         if (shown.rfind(home_dir(), 0) == 0) shown = "~" + shown.substr(home_dir().size());
-        lv_obj_t* path = label(root_, shown.c_str(), &lv_font_montserrat_12, kAccent);
+        lv_obj_t* path = label(root_, shown.c_str(), &zs_font_12, kAccent);
         lv_obj_set_pos(path, 8, 3);
         lv_obj_set_width(path, 230);
         lv_label_set_long_mode(path, LV_LABEL_LONG_DOT);
-        lv_obj_t* cnt = label(root_, fmt("%zu items", entries_.size()).c_str(), &lv_font_montserrat_12, kMuted);
+        lv_obj_t* cnt = label(root_, fmt("%zu items", entries_.size()).c_str(), &zs_font_12, kMuted);
         lv_obj_align(cnt, LV_ALIGN_TOP_RIGHT, -8, 3);
 
         lv_obj_t* list = make_list(root_, 4, 21, kScreenW - 8, kContentH - 24);

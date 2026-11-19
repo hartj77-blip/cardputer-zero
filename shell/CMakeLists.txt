@@ -45,7 +45,7 @@ if(ZS_SDL)
   target_link_libraries(lvgl PUBLIC ${SDL2_LIBRARIES})
 endif()
 
-file(GLOB_RECURSE ZS_SOURCES CONFIGURE_DEPENDS src/*.cpp)
+file(GLOB_RECURSE ZS_SOURCES CONFIGURE_DEPENDS src/*.cpp src/fonts/*.c)
 add_executable(zeroshell ${ZS_SOURCES})
 target_include_directories(zeroshell PRIVATE src)
 target_compile_definitions(zeroshell PRIVATE

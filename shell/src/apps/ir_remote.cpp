@@ -35,7 +35,7 @@ public:
             lv_obj_set_style_bg_color(b, c(i == 0 ? 0x5a1d1d : kSurface), 0);
             lv_obj_set_style_bg_color(b, c(kAccent), LV_STATE_FOCUSED);
             lv_obj_set_style_text_color(b, c(kText), 0);
-            lv_obj_set_style_text_color(b, c(0x000000), LV_STATE_FOCUSED);
+            lv_obj_set_style_text_color(b, c(kOnAccent), LV_STATE_FOCUSED);
             lv_obj_t* l = lv_label_create(b);
             lv_label_set_text(l, codes_[i].name.c_str());
             lv_obj_center(l);
@@ -51,10 +51,10 @@ public:
         lv_obj_set_pos(side, 222, 6);
         lv_obj_set_size(side, 92, 138);
         lv_obj_remove_flag(side, LV_OBJ_FLAG_SCROLLABLE);
-        info_ = label(side, "", &lv_font_montserrat_12, kText);
+        info_ = label(side, "", &zs_font_12, kText);
         lv_obj_set_width(info_, 80);
         lv_label_set_long_mode(info_, LV_LABEL_LONG_WRAP);
-        lv_obj_t* h = label(side, "Enter send\nL learn\nArrows move", &lv_font_montserrat_12, kMuted);
+        lv_obj_t* h = label(side, "Enter send\nL learn\nArrows move", &zs_font_12, kMuted);
         lv_obj_align(h, LV_ALIGN_BOTTOM_LEFT, 0, 0);
         show_info(0);
     }

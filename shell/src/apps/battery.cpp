@@ -21,12 +21,12 @@ public:
         lv_obj_set_style_arc_width(arc_, 10, LV_PART_INDICATOR);
         lv_obj_set_style_arc_color(arc_, c(kSurface2), LV_PART_MAIN);
 
-        pct_ = label(arc_, "--", &lv_font_montserrat_28);
+        pct_ = label(arc_, "--", &zs_font_28);
         lv_obj_align(pct_, LV_ALIGN_CENTER, 0, -4);
-        state_ = label(arc_, "", &lv_font_montserrat_12, kMuted);
+        state_ = label(arc_, "", &zs_font_12, kMuted);
         lv_obj_align(state_, LV_ALIGN_CENTER, 0, 22);
 
-        profile_ = label(root, "", &lv_font_montserrat_12, kAccent);
+        profile_ = label(root, "", &zs_font_12, kAccent);
         lv_obj_set_width(profile_, 120);
         lv_obj_set_style_text_align(profile_, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_set_pos(profile_, 3, 124);

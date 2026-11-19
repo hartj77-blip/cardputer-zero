@@ -102,7 +102,7 @@ private:
         lv_obj_set_style_pad_ver(r, 2, 0);
         lv_obj_set_style_pad_hor(r, 8, 0);
         lv_obj_remove_flag(r, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_t* l = label(r, text, &lv_font_montserrat_12);
+        lv_obj_t* l = label(r, text, &zs_font_12);
         lv_obj_align(l, LV_ALIGN_LEFT_MID, 0, 0);
         return r;
     }
@@ -147,7 +147,7 @@ private:
         lv_obj_set_size(b, LV_PCT(100), 28);
         lv_obj_set_style_bg_color(b, c(kSurface), 0);
         lv_obj_set_style_bg_color(b, c(kAccent), LV_STATE_FOCUSED);
-        lv_obj_set_style_text_color(b, c(0x000000), LV_STATE_FOCUSED);
+        lv_obj_set_style_text_color(b, c(kOnAccent), LV_STATE_FOCUSED);
         lv_obj_set_style_shadow_width(b, 0, 0);
         lv_obj_set_style_radius(b, 8, 0);
         lv_obj_set_style_text_color(b, c(kText), 0);
