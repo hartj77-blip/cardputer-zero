@@ -21,7 +21,24 @@ Open **GPS**. It turns on the expansion port's 5 V, waits for satellites
 - satellites used of those seen, and UTC time
 
 **Enter** saves the spot to `~/Documents/waypoints.txt` (Sync copies it to your
-PC). Leaving the app turns the 5 V off again unless the mesh is running.
+PC). Leaving the app turns the 5 V off again unless the mesh is running or a
+track is recording.
+
+### Recording a track
+
+**R** starts recording where you go; **R** again stops. The top right shows
+the length so far and the time, and the top bar shows an arrow while a track
+records.
+
+- It keeps recording with the GPS app closed and with the screen off, so
+  the Cardputer can sit in a pocket.
+- Tracks are GPX files in `~/Documents/Tracks` (`track-<date>-<time>.gpx`),
+  which Sync copies to your PC. Most map programs and sites open GPX.
+- A point is saved when you have moved 5 m or more (at most one every two
+  seconds); fixes worse than 50 m are skipped. The file is complete after
+  every point, so a flat battery loses nothing.
+- Recording keeps the GPS powered: stop it when you arrive **(measure the
+  battery cost)**. A restart of ZeroShell ends the track.
 
 ## Mesh (Meshtastic)
 

@@ -34,3 +34,4 @@ syncthing
 python3
 gpsd
 gpsd-clients
+usbmuxd

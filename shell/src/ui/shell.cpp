@@ -9,6 +9,7 @@
 #include "ui/remote.h"
 #include "ui/sync.h"
 #include "ui/theme.h"
+#include "ui/tracker.h"
 
 namespace zs {
 
@@ -165,7 +166,9 @@ void Shell::update_statusbar() {
     if (h.muted()) icons += LV_SYMBOL_MUTE "  ";
     if (h.record_state().recording) icons += LV_SYMBOL_STOP " REC  ";
     else if (h.playback().playing) icons += LV_SYMBOL_AUDIO "  ";
+    if (track_state().recording) icons += LV_SYMBOL_GPS "  ";
     if (n.usb_gadget) icons += LV_SYMBOL_USB "  ";
+    if (!n.tether.empty()) icons += ZS_ICON_PHONE "  ";
     if (!n.tailscale_ip.empty()) icons += "TS  ";
     if (sync_running_cached()) icons += LV_SYMBOL_LOOP "  ";
     if (n.bt_enabled) icons += LV_SYMBOL_BLUETOOTH "  ";
@@ -224,6 +227,7 @@ void Shell::tick_cb(lv_timer_t* t) {
     remote_tick(lv_tick_get());
     sync_tick(lv_tick_get());
     player_tick();
+    track_tick();
     // New mesh message while you're elsewhere: show it.
     static int mesh_seen = 0, mesh_n = 0;
     if (++mesh_n % 5 == 0) {

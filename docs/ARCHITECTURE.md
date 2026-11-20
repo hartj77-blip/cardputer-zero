@@ -33,7 +33,7 @@ ZeroOS is five layers. Each one only talks to the layer below it, so apps never 
 
 - `MockHal`: plausible simulated readings for the simulator and CI.
 - `LinuxHal`: real readings through standard kernel interfaces (sysfs power_supply, iio,
-  backlight, leds, rc-core) and system tools (nmcli, wpctl, rfkill, ir-ctl). Every read degrades to
+  backlight, leds, rc-core) and system tools (nmcli, wpctl, rfkill, ir-ctl, rpicam-vid). Every read degrades to
   "unknown" instead of crashing, so a missing driver shows `--`, not a dead UI.
 
 Phase 1 moves `LinuxHal` behind a small system service (`zerod`) with a D-Bus API, so Python apps

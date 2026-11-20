@@ -15,7 +15,7 @@ head -c 48213 /dev/zero > "$DEMO/Pictures/garden.jpg"
 echo "# my project" > "$DEMO/Projects/README.md"
 
 STEPS="shot:01-home.ppm"
-STEPS+=",right,right,right,right,right,right,right,right,right,right,shot:02-home-navigate.ppm"
+STEPS+=",right,right,right,right,right,right,right,right,right,right,right,right,shot:02-home-navigate.ppm"
 STEPS+=",enter,wait:300,shot:03-compass.ppm"
 STEPS+=",open:battery,shot:04-battery.ppm"
 STEPS+=",open:wifi,shot:05-wifi.ppm"
@@ -55,6 +55,15 @@ STEPS+=",enter,wait:300,type:john,enter,wait:300,type:secret,enter,wait:2500,sho
 STEPS+=",down,down,enter,wait:2500,shot:39-jellyfin-albums.ppm"
 STEPS+=",enter,wait:2500,down,enter,wait:2600,shot:40-jellyfin-playing.ppm"
 STEPS+=",home,wait:246000,up,open:media,right,right,wait:300,shot:41-jellyfin-screen-was-off.ppm,key:s"
+
+STEPS+=",open:camera,wait:500,shot:42-camera.ppm"
+STEPS+=",wait:2000,shot:43-camera-wifi-code.ppm"
+STEPS+=",esc,wait:2500,shot:44-camera-link.ppm"
+STEPS+=",open:tether,wait:600,shot:45-tether.ppm"
+STEPS+=",down,down,down,enter,wait:4000,shot:46-tether-search.ppm"
+STEPS+=",enter,wait:2000,shot:47-tether-pairing.ppm"
+STEPS+=",wait:7000,down,down,down,shot:48-tether-online.ppm"
+STEPS+=",open:gps,wait:7000,key:r,wait:45000,key:x,wait:300,shot:49-gps-track.ppm,key:r"
 
 (cd "$OUT" && HOME="$DEMO" TZ=UTC "$BIN" --script "$STEPS")
 python3 "$HERE/ppm2png.py" "$OUT"

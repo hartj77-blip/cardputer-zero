@@ -1,0 +1,323 @@
+#!/usr/bin/python3 -I
+"""ZeroOS tethering helper: the internet through a phone, for ZeroShell.
+
+  zeroos-tether status            what is plugged in, paired and online
+  zeroos-tether search [SECONDS]  look for nearby phones over Bluetooth (10 s)
+  zeroos-tether pair MAC          pair with a phone, then connect
+  zeroos-tether connect MAC       go online through a paired phone
+  zeroos-tether disconnect MAC
+  zeroos-tether forget MAC        disconnect and unpair
+
+Every command prints tab-separated lines and finishes with the state:
+  bt      on|off
+  usb     IFACE NAME IP           a phone on USB (IP empty until it shares)
+  phone   MAC NAME LINK(0/1) ONLINE(0/1)    paired over Bluetooth
+  end
+Along the way an action may print:
+  found   MAC NAME                search: a phone that isn't paired yet
+  searched                        search finished (with or without finds)
+  passkey 123456                  pair: the phone shows the same number
+  stage   connecting              pair: paired, now going online
+  error   TEXT                    why it failed, in words for the screen
+
+USB needs nothing from us: the kernel makes a network interface for a phone
+that shares its connection and NetworkManager brings it up. Bluetooth uses
+BlueZ for pairing (bluetoothctl) and a NetworkManager "panu" connection.
+
+Runs as pi (polkit lets pi manage NetworkManager; see 90-zeroos.rules).
+"""
+import os
+import pty
+import re
+import select
+import subprocess
+import sys
+import time
+
+# Network drivers that mean "a phone sharing its connection".
+PHONE_DRIVERS = ("rndis_host", "cdc_ncm", "ipheth")
+NAP = "00001116-0000-1000-8000-00805f9b34fb"   # the tethering service
+MAC_RE = re.compile(r"^[0-9A-F]{2}(:[0-9A-F]{2}){5}$")
+ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|[\x01\x02\r]")
+
+FAILURES = {
+    "AuthenticationFailed": "The numbers didn't match, or the phone said no",
+    "AuthenticationCanceled": "Pairing was cancelled on the phone",
+    "AuthenticationRejected": "The phone refused to pair",
+    "AuthenticationTimeout": "The phone didn't answer in time",
+    "ConnectionAttemptFailed": "Couldn't reach the phone. Is it nearby?",
+}
+
+
+def out(*fields):
+    print("\t".join(str(f).replace("\t", " ").replace("\n", " ") for f in fields), flush=True)
+
+
+def sh(*args, timeout=20):
+    """Run a command; its output, or "" if it fails or isn't installed."""
+    try:
+        return subprocess.run(args, capture_output=True, text=True, timeout=timeout).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def ok(*args, timeout=20):
+    try:
+        return subprocess.run(args, capture_output=True, timeout=timeout).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def read(path):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def ipv4(iface):
+    m = re.search(r"inet (\d+\.\d+\.\d+\.\d+)", sh("ip", "-4", "-o", "addr", "show", "dev", iface))
+    return m.group(1) if m else ""
+
+
+def usb_phones():
+    found = []
+    try:
+        ifaces = sorted(os.listdir("/sys/class/net"))
+    except OSError:
+        return found
+    for iface in ifaces:
+        base = "/sys/class/net/" + iface
+        try:
+            driver = os.path.basename(os.readlink(base + "/device/driver"))
+        except OSError:
+            continue
+        if driver not in PHONE_DRIVERS:
+            continue
+        # device/ is the USB interface; its parent is the phone itself.
+        name = read(base + "/device/../product") or ("iPhone" if driver == "ipheth" else "Phone")
+        found.append((iface, name, ipv4(iface)))
+    return found
+
+
+def con_name(mac):
+    return "zeroos-tether-" + mac.replace(":", "")
+
+
+def bt_devices(*which):
+    """[(mac, name)] from "bluetoothctl devices [Paired]"."""
+    devs = []
+    for line in sh("bluetoothctl", "devices", *which).splitlines():
+        m = re.match(r"Device ([0-9A-F:]{17}) (.*)", line.strip())
+        if m:
+            devs.append((m.group(1), m.group(2).strip()))
+    return devs
+
+
+def bt_info(mac):
+    text = sh("bluetoothctl", "info", mac)
+    icon = re.search(r"Icon: (\S+)", text)
+    return {
+        "link": "Connected: yes" in text,
+        "nap": NAP in text.lower(),
+        "icon": icon.group(1) if icon else "",
+    }
+
+
+def nameless(mac, name):
+    """BlueZ shows the address with dashes when a device gave no name."""
+    return not name or name.upper().replace("-", ":") == mac
+
+
+def status():
+    out("bt", "on" if "Powered: yes" in sh("bluetoothctl", "show") else "off")
+    for iface, name, ip in usb_phones():
+        out("usb", iface, name, ip)
+    active = sh("nmcli", "-t", "-f", "NAME", "connection", "show", "--active").splitlines()
+    for mac, name in bt_devices("Paired"):
+        info = bt_info(mac)
+        # Phones and computers can share a connection; headphones can't.
+        if not info["nap"] and info["icon"] not in ("phone", "computer"):
+            continue
+        out("phone", mac, name, int(info["link"]), int(con_name(mac) in active))
+    out("end")
+
+
+def power_on():
+    sh("rfkill", "unblock", "bluetooth")
+    for _ in range(10):
+        if ok("bluetoothctl", "power", "on") and "Powered: yes" in sh("bluetoothctl", "show"):
+            return True
+        time.sleep(0.5)
+    out("error", "Bluetooth won't turn on")
+    return False
+
+
+def search(seconds):
+    if not power_on():
+        return
+    sh("bluetoothctl", "--timeout", str(seconds), "scan", "on", timeout=seconds + 10)
+    paired = {mac for mac, _ in bt_devices("Paired")}
+    phones, others = [], []
+    for mac, name in bt_devices():
+        if mac in paired or nameless(mac, name):
+            continue
+        icon = bt_info(mac)["icon"]
+        if icon in ("phone", "computer"):
+            phones.append((mac, name))
+        elif not icon:   # didn't say what it is: list it after the phones
+            others.append((mac, name))
+    for mac, name in (phones + others)[:8]:
+        out("found", mac, name)
+    out("searched")
+
+
+def pair(mac):
+    """Pair through an interactive bluetoothctl (it brings its own agent).
+
+    The phone and bluetoothctl each show a six-digit number. We pass it on
+    for the screen and accept on this side; the person compares the two and
+    taps Pair on the phone, or Cancel if they differ.
+    """
+    if not power_on():
+        return False
+    if mac in {m for m, _ in bt_devices("Paired")}:
+        return True
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.execvp("bluetoothctl", ["bluetoothctl"])
+    text = ""
+
+    def send(line):
+        os.write(fd, (line + "\n").encode())
+
+    def wait(patterns, seconds):
+        """Index and match of the first pattern seen, or (-1, None)."""
+        nonlocal text
+        deadline = time.time() + seconds
+        while True:
+            best = None
+            for i, p in enumerate(patterns):
+                m = re.search(p, text)
+                if m and (best is None or m.start() < best[1].start()):
+                    best = (i, m)
+            if best:
+                text = text[best[1].end():]
+                return best
+            left = deadline - time.time()
+            if left <= 0 or not select.select([fd], [], [], left)[0]:
+                return -1, None
+            try:
+                data = os.read(fd, 4096)
+            except OSError:
+                data = b""
+            if not data:
+                return -1, None
+            text += ANSI.sub("", data.decode("utf-8", "replace"))
+
+    done = False
+    try:
+        wait([r"Agent registered"], 5)
+        send("pair " + mac)
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            i, m = wait([r"Confirm passkey (\d+)[^\n]*\(yes/no\)",       # both sides show a number
+                         r"Passkey: (\d+)",                              # type this number on the phone
+                         r"\(yes/no\)",                                  # any other question: allow
+                         r"Pairing successful|AlreadyExists",
+                         r"Failed to pair: org\.bluez\.Error\.(\w+)",
+                         r"Device \S+ not available"], deadline - time.time())
+            if i in (0, 1):
+                out("passkey", m.group(1))
+            if i in (0, 2):
+                send("yes")
+            elif i == 3:
+                done = True
+                break
+            elif i == 4:
+                out("error", FAILURES.get(m.group(1), "Pairing failed (" + m.group(1) + ")"))
+                break
+            elif i == 5:
+                out("error", "Can't see that phone any more. Search again.")
+                break
+            elif i < 0:
+                out("error", "The phone didn't answer in time")
+                break
+        if done:
+            send("trust " + mac)
+            wait([r"trust succeeded"], 3)
+        send("quit")
+        time.sleep(0.3)
+    finally:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            os.kill(pid, 15)
+            os.waitpid(pid, 0)
+        except OSError:
+            pass
+    return done
+
+
+def connect(mac):
+    if not power_on():
+        return
+    name = con_name(mac)
+    if name not in sh("nmcli", "-t", "-f", "NAME", "connection", "show").splitlines():
+        # Phone data is usually paid for by the megabyte: mark it metered.
+        if not ok("nmcli", "connection", "add", "type", "bluetooth", "con-name", name, "ifname", "*",
+                  "bluetooth.type", "panu", "bluetooth.bdaddr", mac,
+                  "connection.autoconnect", "no", "connection.metered", "yes"):
+            out("error", "Couldn't set up the connection")
+            return
+    # A phone only offers its network while sharing is on, so give
+    # NetworkManager a few tries to see it.
+    for attempt in range(3):
+        if ok("nmcli", "--wait", "30", "connection", "up", "id", name, timeout=40):
+            return
+        time.sleep(2)
+    out("error", "The phone isn't sharing. Turn on Bluetooth tethering (iPhone: Personal Hotspot).")
+
+
+def disconnect(mac):
+    ok("nmcli", "connection", "down", "id", con_name(mac))
+    ok("bluetoothctl", "disconnect", mac)
+
+
+def forget(mac):
+    disconnect(mac)
+    ok("nmcli", "connection", "delete", "id", con_name(mac))
+    ok("bluetoothctl", "remove", mac)
+
+
+def main(argv):
+    cmd = argv[1] if len(argv) > 1 else ""
+    mac = argv[2].upper() if len(argv) > 2 else ""
+    if cmd == "status":
+        pass
+    elif cmd == "search":
+        try:
+            seconds = max(3, min(30, int(argv[2]))) if len(argv) > 2 else 10
+        except ValueError:
+            seconds = 10
+        search(seconds)
+    elif cmd in ("pair", "connect", "disconnect", "forget") and MAC_RE.match(mac):
+        if cmd == "pair":
+            if pair(mac):
+                out("stage", "connecting")
+                time.sleep(2)   # BlueZ is still asking the phone what it offers
+                connect(mac)
+        else:
+            {"connect": connect, "disconnect": disconnect, "forget": forget}[cmd](mac)
+    else:
+        sys.stderr.write(__doc__)
+        return 2
+    status()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

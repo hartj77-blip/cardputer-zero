@@ -1,14 +1,17 @@
 // GPS: where you are, from the Cap LoRa-1262's GPS or a GPS unit on the
 // Grove port (through gpsd; see docs/EXPANSION.md).
 //   Enter  save this spot to ~/Documents/waypoints.txt (synced by Sync)
+//   R      start or stop recording a track (GPX, in ~/Documents/Tracks);
+//          it keeps recording with the app closed and the screen off
 // The expansion port's 5 V is on while the app is open (and while the mesh
-// runs); leaving turns it off again, so each open is a fresh start (~30 s
-// outdoors for a first fix).
+// runs or a track records); leaving turns it off again, so each open is a
+// fresh start (~30 s outdoors for a first fix).
 #include <cmath>
 #include <ctime>
 #include <fstream>
 
 #include "apps/common.h"
+#include "ui/tracker.h"
 
 namespace zs {
 namespace {
@@ -22,8 +25,7 @@ const char* compass_point(double deg) {
 class GpsApp : public App {
 public:
     void build(lv_obj_t* root) override {
-        powered_here_ = !hal().ext_power();
-        if (powered_here_) hal().set_ext_power(true);
+        hal().set_ext_power(true);
         opened_ = std::time(nullptr);
 
         status_ = label(root, "", &zs_font_12, kMuted);
@@ -56,14 +58,15 @@ public:
         acc_ = row("Accuracy");
         sats_ = row("Satellites");
         time_ = row("UTC");
-        hint_ = label(root, "Enter: save spot", &zs_font_12, kMuted);
+        hint_ = label(root, "", &zs_font_12, kMuted);
         lv_obj_align(hint_, LV_ALIGN_TOP_RIGHT, -8, 4);
         update();
     }
 
     ~GpsApp() override {
+        if (track_state().recording) return;   // the track still needs the GPS
         hal().gps_stop();
-        if (powered_here_ && !hal().mesh().running) hal().set_ext_power(false);
+        if (!hal().mesh().running) hal().set_ext_power(false);
     }
 
     void tick() override {
@@ -71,6 +74,20 @@ public:
     }
 
     bool on_key(uint32_t key) override {
+        if (key == 'r' || key == 'R') {
+            if (track_state().recording) {
+                track_stop();
+                const TrackState& t = track_state();
+                shell_toast(t.points ? "Saved " + t.name + " (" + length(t.meters) + ")"
+                                     : "Stopped. No fix, so the track is empty.");
+            } else if (track_start()) {
+                shell_toast("Recording to Documents/Tracks");
+            } else {
+                shell_toast("Couldn't save to ~/Documents");
+            }
+            update();
+            return true;
+        }
         if (key != LV_KEY_ENTER) return false;
         if (fix_.mode < 2) {
             shell_toast("No fix yet");
@@ -91,7 +108,18 @@ public:
     }
 
 private:
+    static std::string length(double m) { return m < 1000 ? fmt("%.0f m", m) : fmt("%.2f km", m / 1000); }
+
     void update() {
+        const TrackState& t = track_state();
+        if (t.recording) {
+            std::string dur = t.seconds < 3600 ? fmt("%ld:%02ld", t.seconds / 60, t.seconds % 60)
+                                               : fmt("%ld:%02ld:%02ld", t.seconds / 3600, t.seconds / 60 % 60, t.seconds % 60);
+            lv_label_set_text(hint_, (LV_SYMBOL_STOP " REC  " + length(t.meters) + "  " + dur).c_str());
+        } else {
+            lv_label_set_text(hint_, "Enter spot   R track");
+        }
+        lv_obj_set_style_text_color(hint_, c(t.recording ? kBad : kMuted), 0);
         fix_ = hal().gps();
         long waited = long(std::time(nullptr) - opened_);
         if (!fix_.device) {
@@ -126,7 +154,6 @@ private:
     lv_obj_t *status_ = nullptr, *lat_ = nullptr, *lon_ = nullptr, *hint_ = nullptr;
     lv_obj_t *alt_ = nullptr, *speed_ = nullptr, *head_ = nullptr, *acc_ = nullptr, *sats_ = nullptr, *time_ = nullptr;
     GpsFix fix_;
-    bool powered_here_ = false;
     std::time_t opened_ = 0;
     int n_ = 0;
 };

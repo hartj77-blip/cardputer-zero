@@ -21,7 +21,7 @@ Sources: [M5 CardputerZero docs](https://docs.m5stack.com/en/CardputerZero), M5'
 | Wi-Fi / BT | BCM43439 2.4 GHz | NetworkManager, BlueZ | Wi-Fi app, Settings |
 | Ethernet | SR9900A (USB) | `eth0` | Status, System app |
 | USB | GL852G hub, USB-A, 2x USB-C, host/gadget switch | | Gadget modes: Phase 3 |
-| Camera* | IMX219 8 MP, CSI | libcamera (RPi fork) | Camera app: Phase 2 |
+| Camera* | IMX219 8 MP, CSI | libcamera (RPi fork): `rpicam-vid`, `rpicam-still` | Camera app (photos, QR codes), see CAMERA.md |
 | Video | HDMI 1080p30, H.264 enc/dec | `/dev/fb1`, V4L2 M2M | Dock mode (labwc on the HDMI card only; mpv hardware H.264), see DOCK.md |
 | Storage | microSD | | Root filesystem |
 | Expansion | Grove HY2.0 (I2C/UART), 14-pin EXT bus | i2c-dev, spidev, UART | GPS app (gpsd), Mesh app (meshtasticd, Cap LoRa-1262); see EXPANSION.md |
