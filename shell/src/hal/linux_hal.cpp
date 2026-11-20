@@ -545,7 +545,8 @@ private:
     long long cpu_prev_[2] = {0, 0};
     std::vector<ProcMem> top_;
     int top_calls_ = 0;
-    pid_t play_pid_ = -1, rec_pid_ = -1;
+    pid_t play_pid_ = -1, rec_pid_ = -1, cam_pid_ = -1;
+    static constexpr const char* kCameraApp = "/usr/bin/camera_app";
     PlaybackState pb_;
     RecordState rec_;
     PlayClock clock_, rec_clock_;
@@ -988,6 +989,42 @@ private:
             term_cache_ = st.rfind("active", 0) == 0 || st.rfind("activating", 0) == 0;
         }
         return term_cache_;
+    }
+
+    // --- Camera: M5Stack's camera_app draws on the LCD itself. It reads the
+    // keyboard without grabbing it, so ZeroShell still sees key presses and
+    // keeps the screen awake (it ignores what they mean while handed off).
+    CameraStatus camera() override {
+        CameraStatus st;
+        st.installed = access(kCameraApp, X_OK) == 0;
+        // A sensor that answered at boot is bound to its driver.
+        for (const char* drv : {"imx219", "imx477", "imx708", "imx296", "ov5647", "ov9281"}) {
+            for (auto& n : list_dir(std::string("/sys/bus/i2c/drivers/") + drv))
+                if (n.find('-') != std::string::npos && std::isdigit((unsigned char)n[0])) st.present = true;
+        }
+        return st;
+    }
+    bool camera_open() override {
+#ifdef __EMSCRIPTEN__
+        return false;
+#else
+        if (camera_active()) return true;
+        if (access(kCameraApp, X_OK) != 0) return false;
+        const char* fb = std::getenv("ZS_FRAMEBUFFER");
+        cam_pid_ = spawn({"env", "CAMERA_APP_KEYBOARD_GRAB=0",
+                          std::string("CAMERA_APP_FB_DEVICE=") + (fb && fb[0] ? fb : "/dev/fb0"), kCameraApp});
+        return cam_pid_ > 0;
+#endif
+    }
+    bool camera_active() override {
+        if (cam_pid_ <= 0) return false;
+        if (exited(cam_pid_)) cam_pid_ = -1;
+        return cam_pid_ > 0;
+    }
+    void camera_close() override {
+        if (cam_pid_ <= 0) return;
+        kill_child(cam_pid_, SIGTERM);   // it saves and stops the sensor on SIGTERM
+        cam_pid_ = -1;
     }
 
     static std::string json_str(const std::string& js, const std::string& key) {

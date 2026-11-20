@@ -452,6 +452,11 @@ public:
         return true;
     }
 
+    CameraStatus camera() override { return {true, true, true}; }
+    bool camera_open() override { return false; }
+    bool camera_active() override { return false; }
+    void camera_close() override {}
+
     void power_off() override { std::printf("[mock] power off\n"); }
     void reboot() override { std::printf("[mock] reboot\n"); }
     void beep(int, int) override {}

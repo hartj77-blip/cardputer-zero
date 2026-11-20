@@ -80,6 +80,13 @@ cat > "${ROOTFS_DIR}/etc/systemd/system/console-setup.service.d/zeroos-unblank.c
 ExecStartPost=/bin/sh -c 'echo 1 > /sys/class/graphics/fb0/blank; echo 0 > /sys/class/graphics/fb0/blank'
 UNIT
 
+# Camera: M5Stack's CameraApp (MIT), the one their own image ships, pinned by
+# version and checksum. ZeroShell's Camera app starts it (docs/CAMERA.md).
+CAMERA_DEB_URL=https://github.com/CardputerZero/CameraApp/releases/download/v1.0.4/Camera_1.0.4_m5stack1_arm64.deb
+CAMERA_DEB_SHA256=9fab11fb9a01a481e301bbe4213ef59bcd53386047ef9208683b1d57cab6b280
+curl -fsSL --retry 3 -o "${ROOTFS_DIR}/tmp/camera.deb" "$CAMERA_DEB_URL"
+echo "${CAMERA_DEB_SHA256}  ${ROOTFS_DIR}/tmp/camera.deb" | sha256sum -c -
+
 on_chroot << 'CHROOT'
 set -e
 # Tailscale from its own repository (not in Debian). Installed but off at
@@ -101,6 +108,15 @@ echo 'deb [signed-by=/usr/share/keyrings/meshtastic.asc] http://download.opensus
 apt-get update
 apt-get install -y meshtasticd
 systemctl disable meshtasticd.service
+# The camera app and the libraries it names (libcamera, libfmt, cJSON...).
+# If it can't be installed the image is still built: ZeroShell's Camera app
+# then says the camera app is missing.
+if apt-get install -y --no-install-recommends /tmp/camera.deb; then
+    echo "zeroos: camera app installed: $(dpkg-query -W -f '${Version}' camera)"
+else
+    echo "zeroos: WARNING: camera app NOT installed"
+fi
+rm -f /tmp/camera.deb
 # GPS: gpsd starts when a client connects (gpsd.socket) and only reads the
 # receiver while someone watches.
 systemctl enable gpsd.socket

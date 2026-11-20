@@ -154,6 +154,12 @@ struct IrCode {
     unsigned scancode = 0;
 };
 
+struct CameraStatus {
+    bool installed = false;   // the camera app is on this image
+    bool present = false;     // a camera sensor answered (never on the Lite)
+    bool simulated = false;   // the simulator: nothing real to open
+};
+
 struct Track {
     std::string path;
     std::string title;
@@ -291,6 +297,14 @@ public:
     // backend has no real terminal (the simulator).
     virtual bool terminal_open(const std::string& command) = 0;
     virtual bool terminal_active() = 0;
+
+    // Camera: hands the screen to M5Stack's camera app (viewfinder, photos,
+    // gallery) until it exits. camera_open is false if it can't start, as
+    // in the simulator.
+    virtual CameraStatus camera() = 0;
+    virtual bool camera_open() = 0;
+    virtual bool camera_active() = 0;
+    virtual void camera_close() = 0;
     virtual int volume() = 0;                // 0..100
     virtual void set_volume(int pct) = 0;
     virtual bool muted() = 0;

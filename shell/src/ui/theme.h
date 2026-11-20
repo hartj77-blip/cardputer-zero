@@ -31,6 +31,7 @@ LV_FONT_DECLARE(zs_font_28)
 #define ZS_ICON_SLIDERS    "\xEF\x87\x9E"   // U+F1DE
 #define ZS_ICON_GAUGE      "\xEF\x8F\xBD"   // U+F3FD
 #define ZS_ICON_LAPTOP     "\xEF\x84\x89"   // U+F109
+#define ZS_ICON_CAMERA     "\xEF\x80\xB0"   // U+F030
 
 namespace zs::theme {
 
