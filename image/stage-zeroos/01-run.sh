@@ -56,6 +56,19 @@ install -m 0755 files/tether/zeroos-tether   "${ROOTFS_DIR}/usr/bin/zeroos-tethe
 # Console font for the Terminal app: Terminus 6x12 gives 53 x 14 on 320 x 170.
 sed -i -e 's/^FONTFACE=.*/FONTFACE="Terminus"/' -e 's/^FONTSIZE=.*/FONTSIZE="6x12"/' \
     "${ROOTFS_DIR}/etc/default/console-setup" 2>/dev/null || true
+# Audio: ZeroShell is a system service, so nothing logs pi in. Lingering starts
+# pi's user session (PipeWire, WirePlumber) at boot; without it volume and mute
+# have no sound server to talk to. M5's image gets this from its launcher.
+install -d -m 0755 "${ROOTFS_DIR}/var/lib/systemd/linger"
+touch "${ROOTFS_DIR}/var/lib/systemd/linger/${FIRST_USER_NAME}"
+# First-boot volume: WirePlumber's default is close to silent on this speaker (M5 bug #262).
+install -D -m 0644 files/50-zeroos-default-volume.conf \
+                   "${ROOTFS_DIR}/etc/wireplumber/wireplumber.conf.d/50-zeroos-default-volume.conf"
+# /dev/i2c-* for the Grove port and i2c-tools (M5 loads this in a script we drop).
+echo i2c-dev > "${ROOTFS_DIR}/etc/modules-load.d/zeroos.conf"
+# ZeroShell restores brightness itself. systemd-backlight would save the level at
+# shutdown (0 if the screen was off) and put it back at boot; M5 masks it too.
+ln -sf /dev/null "${ROOTFS_DIR}/etc/systemd/system/systemd-backlight@backlight:backlight.service"
 install -D -m 0644 files/nm-wifi-powersave.conf "${ROOTFS_DIR}/etc/NetworkManager/conf.d/90-zeroos-powersave.conf"
 cat files/initramfs-modules >>               "${ROOTFS_DIR}/etc/initramfs-tools/modules"
 install -m 0755 files/initramfs-hook         "${ROOTFS_DIR}/etc/initramfs-tools/hooks/zeroos-panel"

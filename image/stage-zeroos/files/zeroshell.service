@@ -1,6 +1,9 @@
 [Unit]
 Description=ZeroShell (Cardputer Zero home screen)
 After=systemd-user-sessions.service NetworkManager.service sound.target
+# pi's user session runs PipeWire (volume, mute, playback); see the linger file.
+Wants=user@1000.service
+After=user@1000.service
 Conflicts=getty@tty1.service
 
 [Service]

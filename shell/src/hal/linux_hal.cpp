@@ -322,7 +322,12 @@ public:
     bool wifi_connect(const std::string& ssid, const std::string& psk) override {
         std::string cmd = "nmcli dev wifi connect " + shell_quote(ssid);
         if (!psk.empty()) cmd += " password " + shell_quote(psk);
-        return run(cmd + " && echo OK").find("OK") != std::string::npos;
+        if (run(cmd + " && echo OK").find("OK") != std::string::npos) return true;
+        // A failed attempt with a typed password must not leave that password
+        // saved: NetworkManager would keep retrying it and the next connect
+        // would reuse it instead of asking (M5 launcher fix #62).
+        if (!psk.empty()) run("nmcli connection delete id " + shell_quote(ssid));
+        return false;
     }
     void set_wifi_enabled(bool on) override { run(std::string("nmcli radio wifi ") + (on ? "on" : "off")); }
     void set_bt_enabled(bool on) override { run(std::string("rfkill ") + (on ? "unblock" : "block") + " bluetooth"); }

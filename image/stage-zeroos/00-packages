@@ -2,6 +2,7 @@ network-manager
 bluez
 pipewire
 pipewire-pulse
+pipewire-alsa
 wireplumber
 alsa-utils
 sox
