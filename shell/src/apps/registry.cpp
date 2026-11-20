@@ -23,6 +23,7 @@ std::unique_ptr<App> make_mesh_app();
 std::unique_ptr<App> make_camera_app();
 std::unique_ptr<App> make_car_app();
 std::unique_ptr<App> make_tether_app();
+std::unique_ptr<App> make_update_app();
 
 const std::vector<AppInfo>& app_registry() {
     static const std::vector<AppInfo> apps = {
@@ -45,6 +46,7 @@ const std::vector<AppInfo>& app_registry() {
         {"dock", "Dock", ZS_ICON_DESKTOP, 0x1c71d8, make_dock_app},
         {"sysmon", "System", ZS_ICON_GAUGE, 0x5e6c7b, make_sysmon_app},
         {"settings", "Settings", LV_SYMBOL_SETTINGS, 0x77767b, make_settings_app},
+        {"update", "Update", LV_SYMBOL_DOWNLOAD, 0xc66a00, make_update_app},
     };
     return apps;
 }

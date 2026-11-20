@@ -1,0 +1,42 @@
+name: Release
+
+# Pushing a tag like v0.2.0 publishes that version as an update: the zeroos
+# package and its manifest become a GitHub release, which is where
+# zeroos-update on the device looks (docs/UPDATE.md).
+# The SD card image is separate: run "Build image" for a fresh one.
+on:
+  push:
+    tags: ['v[0-9]*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # image/version.sh reads the tag
+      - name: Install cross compiler
+        run: sudo apt-get update && sudo apt-get install -y cmake g++-aarch64-linux-gnu
+      - name: Build ZeroShell (arm64)
+        run: |
+          cmake -S shell -B build/device -DZS_BACKEND=device \
+            -DCMAKE_TOOLCHAIN_FILE=$PWD/cmake/aarch64-linux-gnu.cmake
+          cmake --build build/device -j"$(nproc)"
+          aarch64-linux-gnu-strip build/device/zeroshell
+      - name: Update tests
+        run: image/tests/update-test.sh
+      - name: Package
+        run: |
+          image/package.sh build/device/zeroshell build/update
+          cat build/update/zeroos-update.manifest
+          # The tag is the version: v0.2.0 must give zeroos_0.2.0_arm64.deb.
+          test -f "build/update/zeroos_${GITHUB_REF_NAME#v}_arm64.deb"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" build/update/zeroos_*.deb build/update/zeroos-update.manifest \
+            --title "ZeroOS ${GITHUB_REF_NAME#v}" --generate-notes

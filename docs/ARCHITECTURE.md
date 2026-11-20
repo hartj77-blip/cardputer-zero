@@ -49,3 +49,7 @@ The `Hal` interface stays the same.
 3. stops after stage 2 (no desktop, 512 MB RAM);
 4. adds `stage2/06-zeroos` (`image/stage-zeroos/`): ZeroShell as a systemd service, polkit and udev
    rules so it runs as `pi`, memory tuning (zram + SD writeback, earlyoom, logs in RAM; see PERFORMANCE.md), and the fixes from early owner reports (see HARDWARE.md).
+
+Everything ZeroOS owns goes onto the image as one Debian package, `zeroos` (`image/stage-zeroos/payload.sh`
+lists the files). The same package is what an update installs later, over Wi-Fi or Ethernet, so a
+flashed card and an updated one hold the same files. See [UPDATE.md](UPDATE.md).
