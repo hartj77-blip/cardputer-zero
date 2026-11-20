@@ -49,6 +49,12 @@ STEPS+=",open:mesh,wait:300,shot:30-mesh-off.ppm"
 STEPS+=",enter,wait:3500,shot:31-mesh-chat.ppm"
 STEPS+=",type:On my way,enter,wait:4500,shot:32-mesh-reply.ppm"
 STEPS+=",tab,wait:300,shot:33-mesh-info.ppm"
+STEPS+=",open:media,right,right,wait:300,shot:36-jellyfin-sign-in.ppm"
+STEPS+=",enter,wait:300,type:nas.local,shot:37-jellyfin-server.ppm"
+STEPS+=",enter,wait:300,type:john,enter,wait:300,type:secret,enter,wait:2500,shot:38-jellyfin-menu.ppm"
+STEPS+=",down,down,enter,wait:2500,shot:39-jellyfin-albums.ppm"
+STEPS+=",enter,wait:2500,down,enter,wait:2600,shot:40-jellyfin-playing.ppm"
+STEPS+=",home,wait:246000,up,open:media,right,right,wait:300,shot:41-jellyfin-screen-was-off.ppm,key:s"
 
 (cd "$OUT" && HOME="$DEMO" TZ=UTC "$BIN" --script "$STEPS")
 python3 "$HERE/ppm2png.py" "$OUT"

@@ -335,6 +335,62 @@ public:
         clock_.start();
         return true;
     }
+    bool play_stream(const std::string& url, const std::string&, int duration_s) override {
+        pb_ = PlaybackState{};
+        pb_.path = url;
+        pb_.playing = true;
+        pb_.dur_ms = duration_s > 0 ? duration_s * 1000 : 30000;
+        clock_.start();
+        return true;
+    }
+    // A pretend Jellyfin server: any address and user sign in.
+    bool jellyfin_login(const std::string& server, const std::string& user, const std::string& password,
+                        const std::string& device_id, JfSession& out, std::string& error) override {
+        if (password == "wrong") {
+            error = "Wrong user name or password";
+            return false;
+        }
+        out = JfSession{jf::normalize_server(server), user, "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f", "simulated", device_id};
+        return true;
+    }
+    bool jellyfin_list(const JfSession&, JfView view, const std::string& arg, std::vector<JfItem>& out,
+                       std::string&) override {
+        using K = JfItem;
+        static const std::vector<JfItem> albums = {
+            {K::Album, "a1", "Bench Tapes Vol. 2", "Bench Tapes", -1},
+            {K::Album, "a2", "Chip Sessions", "Various Artists", -1},
+            {K::Album, "a3", "Night Drive", "Synthwave Demos", -1},
+            {K::Album, "a4", "Solder & Flux", "Bench Tapes", -1},
+        };
+        static const std::vector<JfItem> tracks = {
+            {K::Track, "c1", "Low Battery Blues", "Bench Tapes", 243},
+            {K::Track, "c2", "Pocket Computer", "Bench Tapes", 162},
+            {K::Track, "c3", "Forty-Six Keys", "Bench Tapes", 201},
+            {K::Track, "c4", "Interrupt Request", "Bench Tapes", 199},
+            {K::Track, "c5", "Brownout", "Bench Tapes", 177},
+        };
+        switch (view) {
+            case JfView::Latest:
+            case JfView::Albums:
+            case JfView::ArtistAlbums: out = albums; break;
+            case JfView::Artists:
+                out = {{K::Artist, "b1", "Bench Tapes", "", -1}, {K::Artist, "b2", "Synthwave Demos", "", -1}};
+                break;
+            case JfView::Playlists: out = {{K::Playlist, "d1", "Soldering", "", -1}}; break;
+            case JfView::Search:
+                out.clear();
+                for (auto& t : tracks)
+                    if (lower(t.name).find(lower(arg)) != std::string::npos) out.push_back(t);
+                break;
+            case JfView::AlbumTracks:
+            case JfView::PlaylistTracks: out = tracks; break;
+        }
+        return true;
+    }
+    static std::string lower(std::string s) {
+        for (auto& ch : s) ch = char(std::tolower((unsigned char)ch));
+        return s;
+    }
     void set_paused(bool p) override {
         if (pb_.path.empty()) return;
         pb_.paused = p;
