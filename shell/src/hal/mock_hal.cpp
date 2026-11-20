@@ -452,6 +452,46 @@ public:
         return true;
     }
 
+    // A pretend car and headphones; pairing always works.
+    std::vector<BtDevice> bt_devices() override { return bt_; }
+    void bt_scan() override {
+        if (bt_.size() < 3) bt_.push_back({"00:1A:7D:DA:71:13", "Kitchen speaker", false, false});
+    }
+    bool bt_connect(const std::string& address, std::string&) override {
+        for (auto& d : bt_) {
+            d.connected = d.address == address;
+            d.paired = d.paired || d.connected;
+        }
+        return true;
+    }
+    void bt_disconnect(const std::string& address) override {
+        for (auto& d : bt_) if (d.address == address) d.connected = false;
+    }
+    void bt_forget(const std::string& address) override {
+        for (size_t i = 0; i < bt_.size(); ++i) if (bt_[i].address == address) { bt_.erase(bt_.begin() + long(i)); break; }
+    }
+    void bt_set_visible(int) override {}
+    MediaKey media_key() override { return MediaKey::None; }
+
+    // The copy takes a few seconds, then the "car" takes the stick.
+    UsbStickStatus usb_stick() override {
+        UsbStickStatus st;
+        if (!stick_on_) return st;
+        long ms = stick_clock_.ms();
+        if (ms < 4000) {
+            st.state = UsbStickStatus::Building;
+            st.percent = int(ms / 40);
+        } else {
+            st.state = ms < 7000 ? UsbStickStatus::Ready : UsbStickStatus::Attached;
+        }
+        return st;
+    }
+    void usb_stick_start() override {
+        stick_on_ = true;
+        stick_clock_.start();
+    }
+    void usb_stick_stop() override { stick_on_ = false; }
+
     CameraStatus camera() override { return {true, true, true}; }
     bool camera_open() override { return false; }
     bool camera_active() override { return false; }
@@ -462,6 +502,12 @@ public:
     void beep(int, int) override {}
 
 private:
+    std::vector<BtDevice> bt_ = {
+        {"F4:4E:FD:12:9A:0C", "Car Multimedia", true, false},
+        {"AC:12:2F:5B:E0:41", "Headphones", true, false},
+    };
+    bool stick_on_ = false;
+    PlayClock stick_clock_;
     PlaybackState pb_;
     PlayClock clock_, rec_clock_;
     RecordState rec_;

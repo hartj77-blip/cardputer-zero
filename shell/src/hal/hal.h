@@ -154,6 +154,24 @@ struct IrCode {
     unsigned scancode = 0;
 };
 
+// A Bluetooth speaker, headset or car stereo.
+struct BtDevice {
+    std::string address;      // AA:BB:CC:DD:EE:FF
+    std::string name;
+    bool paired = false;
+    bool connected = false;
+};
+
+// USB stick mode: the device port offers a copy of ~/Music to a car stereo.
+struct UsbStickStatus {
+    enum State { Off, Building, Ready, Attached, Error } state = Off;
+    int percent = 0;          // Building: how far the music copy has got
+    std::string error;        // Error: a short reason
+};
+
+// Play/skip buttons on a car stereo or headset (Bluetooth), or a USB keyboard.
+enum class MediaKey { None, PlayPause, Play, Pause, Stop, Next, Previous };
+
 struct CameraStatus {
     bool installed = false;   // the camera app is on this image
     bool present = false;     // a camera sensor answered (never on the Lite)
@@ -326,6 +344,22 @@ public:
                                 const std::string& device_id, JfSession& out, std::string& error) = 0;
     virtual bool jellyfin_list(const JfSession& s, JfView view, const std::string& arg, std::vector<JfItem>& out,
                                std::string& error) = 0;
+
+    // Bluetooth audio out. bt_scan and bt_connect wait: about 8 and up to
+    // 40 seconds. Connecting pairs first if needed; sound then follows.
+    virtual std::vector<BtDevice> bt_devices() = 0;       // paired, and seen by the last scan
+    virtual void bt_scan() = 0;
+    virtual bool bt_connect(const std::string& address, std::string& error) = 0;
+    virtual void bt_disconnect(const std::string& address) = 0;
+    virtual void bt_forget(const std::string& address) = 0;
+    // Let a car find and pair with us from its own screen, for seconds.
+    virtual void bt_set_visible(int seconds) = 0;
+    // The next play/skip button press, or None. Call until None.
+    virtual MediaKey media_key() = 0;
+
+    virtual UsbStickStatus usb_stick() = 0;
+    virtual void usb_stick_start() = 0;
+    virtual void usb_stick_stop() = 0;
 
     // Voice notes from the MEMS mic, saved to ~/Recordings as 16 kHz mono WAV.
     virtual std::vector<Track> recordings() = 0;          // newest first

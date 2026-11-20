@@ -40,6 +40,11 @@ install -D -m 0644 files/sync/syncthing-zeroos.conf \
 for d in Notes Documents Recordings; do
     install -d -o 1000 -g 1000 "${ROOTFS_DIR}/home/${FIRST_USER_NAME}/$d" 2>/dev/null || true
 done
+# Car: USB stick mode and Bluetooth audio (docs/CAR.md).
+install -m 0755 files/car/zeroos-usb-stick   "${ROOTFS_DIR}/usr/lib/zeroos/usb-stick"
+install -m 0644 files/car/zeroos-usb-stick.service "${ROOTFS_DIR}/etc/systemd/system/"
+# uinput: BlueZ turns the car's play/skip buttons into key presses with it.
+printf 'uinput\nlibcomposite\n' >           "${ROOTFS_DIR}/etc/modules-load.d/zeroos-car.conf"
 # Expansion: GPS on the UART (G14/G15, EXT and Grove), LoRa on SPI0 CE1.
 install -m 0644 files/expansion/gpsd.default "${ROOTFS_DIR}/etc/default/gpsd"
 install -D -m 0644 files/expansion/meshtasticd-cap-lora-1262.yaml \
@@ -155,7 +160,8 @@ disable_if_present apt-daily.timer apt-daily-upgrade.timer man-db.timer e2scrub_
 systemctl --global disable rpi-connect.service rpi-connect-wayvnc.service 2>/dev/null || true
 
 groupadd -f spi   # /dev/spidev* stays root-only without it (owner report)
-for g in video input audio netdev i2c gpio spi dialout adm; do   # adm: read service logs
+groupadd -f bluetooth   # normally made by bluez; zeroshell.service names it
+for g in video input audio netdev i2c gpio spi dialout adm bluetooth; do   # adm: read service logs; bluetooth: pair devices
     getent group "$g" >/dev/null && usermod -aG "$g" pi
 done
 update-initramfs -u -k all || true
