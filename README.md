@@ -24,7 +24,7 @@ radios, audio, camera, real-time clock, key LEDs and the expansion ports.
 Apps: **Terminal** (a real console on the built-in screen, with tmux), **Remote** (Tailscale sign-in by QR
 code, your devices, one-key SSH, remote desktop on a monitor, Taildrop), **Sync** (Notes, Documents and
 Recordings kept the same on your PC and phone with Syncthing), **GPS** and **Mesh** (Meshtastic
-text messaging over LoRa with the Cap LoRa-1262), **Files**, **Notes**, **Media** (music player + voice notes), **Wi-Fi**, **IR Remote** (send + learn), **Compass** (with spirit level),
+text messaging over LoRa with the Cap LoRa-1262), **Files**, **Notes**, **Media** (music player, music from a Jellyfin server, voice notes), **Wi-Fi**, **IR Remote** (send + learn), **Compass** (with spirit level),
 **Battery** (time left, power draw, power profile), **Clock** (with stopwatch), **Dock** (desktop with web
 browser, video, terminal and files on an HDMI monitor), **System** monitor (CPU and
 where the memory goes), **Settings** (Wi-Fi, Bluetooth, brightness, volume, mute, power profile, screen dimming
@@ -44,7 +44,7 @@ cmake --build build/sim -j
 
 Keys: arrows move, **Enter** opens, **Esc** or **`** goes back, letters jump to an app on the home screen.
 On the home screen, **Left** from the first column moves into the dock, and **1** to **5** open the dock's apps.
-Inside apps: **R** rescans Wi-Fi, **L** learns an IR code **Space** pauses music or runs the stopwatch, **N** skips a track, **R** records a voice note. Notes save when you leave.
+Inside apps: **R** rescans Wi-Fi, **L** learns an IR code, **Space** pauses music or runs the stopwatch, **N** skips a track, **R** records a voice note. Notes save when you leave.
 
 Or build the browser version (same code, WebAssembly, one HTML file with on-screen keys):
 
@@ -79,6 +79,7 @@ first, copy `build/device/zeroshell` over, stop the stock launcher
 - [docs/HARDWARE.md](docs/HARDWARE.md): every chip, how Linux exposes it, known issues and our fixes
 - [docs/ROADMAP.md](docs/ROADMAP.md): phases and what's next
 - [docs/REMOTE.md](docs/REMOTE.md): Remote mode, Tailscale, Terminal and Taildrop
+- [docs/JELLYFIN.md](docs/JELLYFIN.md): music from a Jellyfin server in the Media app
 - [docs/SYNC.md](docs/SYNC.md): Sync for Notes, Documents and Recordings
 - [docs/EXPANSION.md](docs/EXPANSION.md): GPS and LoRa modules on the expansion ports
 - [docs/DOCK.md](docs/DOCK.md): Dock mode, the desktop on an HDMI monitor

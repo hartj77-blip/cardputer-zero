@@ -41,6 +41,7 @@ void save() {
         out << "# ZeroOS settings (written by ZeroShell)\n";
         for (auto& [k, v] : store()) out << k << '=' << v << '\n';
     }
+    chmod(tmp.c_str(), 0600);   // it can hold a Jellyfin sign-in token
     std::rename(tmp.c_str(), (d + "/settings.conf").c_str());
 }
 

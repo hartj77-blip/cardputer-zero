@@ -370,6 +370,32 @@ public:
         clock_.start();
         return true;
     }
+    bool play_stream(const std::string& url, const std::string& auth, int duration_s) override {
+        stop();
+        if (url.rfind("http://", 0) != 0 && url.rfind("https://", 0) != 0) return false;
+        // mpv, not sox: it streams over HTTP and plays whatever the server sends.
+        std::vector<std::string> argv = {"mpv", "--no-video", "--no-terminal", "--really-quiet", "--no-config",
+                                         "--cache=yes", "--demuxer-max-bytes=16MiB"};
+        if (!auth.empty()) argv.push_back("--http-header-fields=Authorization: " + auth);
+        argv.push_back("--");
+        argv.push_back(url);
+        play_pid_ = spawn(argv);
+        if (play_pid_ <= 0) return false;
+        pb_ = PlaybackState{};
+        pb_.path = url;
+        pb_.playing = true;
+        pb_.dur_ms = duration_s >= 0 ? duration_s * 1000 : -1;
+        clock_.start();
+        return true;
+    }
+    bool jellyfin_login(const std::string& server, const std::string& user, const std::string& password,
+                        const std::string& device_id, JfSession& out, std::string& error) override {
+        return jf::login(server, user, password, device_id, out, error);
+    }
+    bool jellyfin_list(const JfSession& s, JfView view, const std::string& arg, std::vector<JfItem>& out,
+                       std::string& error) override {
+        return jf::list(s, view, arg, out, error);
+    }
     void set_paused(bool p) override {
         if (play_pid_ <= 0) return;
 #ifndef __EMSCRIPTEN__

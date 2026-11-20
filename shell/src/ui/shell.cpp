@@ -4,6 +4,7 @@
 
 #include "hal/hal.h"
 #include "platform/platform.h"
+#include "ui/player.h"
 #include "ui/power.h"
 #include "ui/remote.h"
 #include "ui/sync.h"
@@ -222,6 +223,7 @@ void Shell::tick_cb(lv_timer_t* t) {
     power().tick(lv_tick_get());
     remote_tick(lv_tick_get());
     sync_tick(lv_tick_get());
+    player_tick();
     // New mesh message while you're elsewhere: show it.
     static int mesh_seen = 0, mesh_n = 0;
     if (++mesh_n % 5 == 0) {

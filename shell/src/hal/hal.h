@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "hal/jellyfin.h"
+
 namespace zs {
 
 struct BatteryInfo {
@@ -297,9 +299,19 @@ public:
     // Audio playback through the speaker / headphone jack (ES8389 + AW8737A).
     virtual std::vector<Track> music_library() = 0;     // ~/Music
     virtual bool play(const std::string& path) = 0;      // stops anything playing
+    // Play audio from an http(s) address (a Jellyfin track). auth is sent as
+    // the Authorization header; duration_s is what the server said, or -1.
+    virtual bool play_stream(const std::string& url, const std::string& auth, int duration_s) = 0;
     virtual void set_paused(bool paused) = 0;
     virtual void stop() = 0;
     virtual PlaybackState playback() = 0;
+
+    // Music from a Jellyfin server (hal/jellyfin.h). These wait on the
+    // network, up to about 12 seconds.
+    virtual bool jellyfin_login(const std::string& server, const std::string& user, const std::string& password,
+                                const std::string& device_id, JfSession& out, std::string& error) = 0;
+    virtual bool jellyfin_list(const JfSession& s, JfView view, const std::string& arg, std::vector<JfItem>& out,
+                               std::string& error) = 0;
 
     // Voice notes from the MEMS mic, saved to ~/Recordings as 16 kHz mono WAV.
     virtual std::vector<Track> recordings() = 0;          // newest first
