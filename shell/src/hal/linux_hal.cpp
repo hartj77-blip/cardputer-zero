@@ -16,6 +16,10 @@
 // None of this is verified on hardware yet (Phase 1 bring-up).
 #include <dirent.h>
 #include <fcntl.h>
+#ifndef __EMSCRIPTEN__
+#include <linux/input.h>   // media keys from a Bluetooth car or headset
+#include <sys/ioctl.h>
+#endif
 #include <signal.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -545,7 +549,10 @@ private:
     long long cpu_prev_[2] = {0, 0};
     std::vector<ProcMem> top_;
     int top_calls_ = 0;
-    pid_t play_pid_ = -1, rec_pid_ = -1;
+    pid_t play_pid_ = -1, rec_pid_ = -1, cam_pid_ = -1, visible_pid_ = -1;
+    std::vector<int> media_fds_;
+    time_t media_scan_ = 0;
+    static constexpr const char* kCameraApp = "/usr/bin/camera_app";
     PlaybackState pb_;
     RecordState rec_;
     PlayClock clock_, rec_clock_;
@@ -988,6 +995,201 @@ private:
             term_cache_ = st.rfind("active", 0) == 0 || st.rfind("activating", 0) == 0;
         }
         return term_cache_;
+    }
+
+    // --- Bluetooth audio out (docs/CAR.md). bluetoothctl does the pairing;
+    // PipeWire's Bluetooth module sends the sound once a device connects.
+    static bool is_address(const std::string& a) {
+        if (a.size() != 17) return false;
+        for (size_t i = 0; i < 17; ++i) {
+            if (i % 3 == 2 ? a[i] != ':' : !std::isxdigit((unsigned char)a[i])) return false;
+        }
+        return true;
+    }
+    // "Device AA:BB:CC:DD:EE:FF Name with spaces" lines.
+    static void parse_bt(const std::string& out, std::vector<BtDevice>& v, bool paired, bool connected) {
+        std::istringstream in(out);
+        for (std::string l; std::getline(in, l);) {
+            if (l.rfind("Device ", 0) != 0 || l.size() < 24) continue;
+            std::string addr = l.substr(7, 17);
+            if (!is_address(addr)) continue;
+            std::string name = l.size() > 25 ? l.substr(25) : addr;
+            BtDevice* d = nullptr;
+            for (auto& x : v)
+                if (x.address == addr) d = &x;
+            if (!d) {
+                // Devices that only announce an address are not speakers or cars.
+                std::string dashed = addr;
+                for (auto& ch : dashed) if (ch == ':') ch = '-';
+                if (!paired && (name == addr || name == dashed)) continue;
+                v.push_back({addr, name, false, false});
+                d = &v.back();
+            }
+            d->paired = d->paired || paired;
+            d->connected = d->connected || connected;
+        }
+    }
+    std::vector<BtDevice> bt_devices() override {
+        std::vector<BtDevice> v;
+        parse_bt(run("bluetoothctl devices Connected"), v, true, true);
+        parse_bt(run("bluetoothctl devices Paired"), v, true, false);
+        parse_bt(run("bluetoothctl devices"), v, false, false);
+        std::stable_sort(v.begin(), v.end(), [](const BtDevice& a, const BtDevice& b) {
+            return a.connected != b.connected ? a.connected : a.paired != b.paired ? a.paired : false;
+        });
+        return v;
+    }
+    void bt_scan() override {
+        run("rfkill unblock bluetooth");
+        run("bluetoothctl power on");
+        run("bluetoothctl --timeout 8 scan on");
+    }
+    bool bt_connect(const std::string& address, std::string& error) override {
+        if (!is_address(address)) {
+            error = "Not a Bluetooth address";
+            return false;
+        }
+        run("rfkill unblock bluetooth");
+        run("bluetoothctl power on");
+        std::string info = run("bluetoothctl info " + address);
+        if (info.find("Paired: yes") == std::string::npos) {
+            // "Just works" pairing: nothing to type here; the car may ask you to confirm.
+            std::string out = run("bluetoothctl --agent=NoInputNoOutput --timeout 25 pair " + address);
+            if (out.find("Pairing successful") == std::string::npos &&
+                run("bluetoothctl info " + address).find("Paired: yes") == std::string::npos) {
+                error = "Pairing failed. Is it in pairing mode?";
+                return false;
+            }
+        }
+        run("bluetoothctl trust " + address);   // lets it reconnect by itself later
+        std::string out = run("bluetoothctl --timeout 15 connect " + address);
+        if (out.find("Connection successful") == std::string::npos &&
+            run("bluetoothctl info " + address).find("Connected: yes") == std::string::npos) {
+            error = "Paired, but it didn't connect";
+            return false;
+        }
+        return true;
+    }
+    void bt_disconnect(const std::string& address) override {
+        if (is_address(address)) run("bluetoothctl --timeout 8 disconnect " + address);
+    }
+    void bt_forget(const std::string& address) override {
+        if (is_address(address)) run("bluetoothctl remove " + address);
+    }
+    void bt_set_visible(int seconds) override {
+#ifndef __EMSCRIPTEN__
+        kill_child(visible_pid_, SIGTERM);
+        visible_pid_ = -1;
+        if (seconds <= 0) return;
+        run("rfkill unblock bluetooth");
+        run("bluetoothctl power on");
+        // bluetoothctl stays open as the pairing agent for the whole time,
+        // then trusts whatever paired so it can reconnect by itself.
+        std::string s = std::to_string(seconds);
+        visible_pid_ = spawn({"sh", "-c",
+            "(echo 'discoverable on'; echo 'pairable on'; sleep " + s + "; echo 'discoverable off') "
+            "| bluetoothctl --agent=NoInputNoOutput >/dev/null 2>&1; "
+            "bluetoothctl devices Paired | while read -r _ a _; do bluetoothctl trust \"$a\"; done"});
+#endif
+    }
+
+    // Play/skip buttons: BlueZ presents a connected car or headset's buttons
+    // as an input device (through uinput), like a USB multimedia keyboard.
+    MediaKey media_key() override {
+#ifdef __EMSCRIPTEN__
+        return MediaKey::None;
+#else
+        time_t now = time(nullptr);
+        if (now - media_scan_ >= 3) {   // devices come and go with the connection
+            media_scan_ = now;
+            for (int fd : media_fds_) close(fd);
+            media_fds_.clear();
+            for (auto& n : list_dir("/dev/input")) {
+                if (n.rfind("event", 0) != 0) continue;
+                int fd = open(("/dev/input/" + n).c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+                if (fd < 0) continue;
+                unsigned long keys[KEY_MAX / (8 * sizeof(long)) + 1] = {0};
+                ioctl(fd, EVIOCGBIT(EV_KEY, sizeof keys), keys);
+                auto has = [&](int k) { return (keys[k / (8 * sizeof(long))] >> (k % (8 * sizeof(long)))) & 1; };
+                // Media buttons but no letters: not the built-in keyboard.
+                if ((has(KEY_NEXTSONG) || has(KEY_PLAYCD) || has(KEY_PLAYPAUSE)) && !has(KEY_A)) media_fds_.push_back(fd);
+                else close(fd);
+            }
+        }
+        for (int fd : media_fds_) {
+            input_event ev;
+            while (read(fd, &ev, sizeof ev) == ssize_t(sizeof ev)) {
+                if (ev.type != EV_KEY || ev.value != 1) continue;
+                switch (ev.code) {
+                    case KEY_PLAYPAUSE: return MediaKey::PlayPause;
+                    case KEY_PLAYCD: case KEY_PLAY: return MediaKey::Play;
+                    case KEY_PAUSECD: case KEY_PAUSE: return MediaKey::Pause;
+                    case KEY_STOPCD: case KEY_STOP: return MediaKey::Stop;
+                    case KEY_NEXTSONG: case KEY_FASTFORWARD: return MediaKey::Next;
+                    case KEY_PREVIOUSSONG: case KEY_REWIND: return MediaKey::Previous;
+                }
+            }
+        }
+        return MediaKey::None;
+#endif
+    }
+
+    // --- USB stick mode: zeroos-usb-stick.service does the work as root and
+    // reports through a state file.
+    UsbStickStatus usb_stick() override {
+        UsbStickStatus st;
+        std::string s = read_str("/run/zeroos/usb-stick.state");
+        if (s.rfind("building", 0) == 0) {
+            st.state = UsbStickStatus::Building;
+            st.percent = std::atoi(s.c_str() + 8);
+        } else if (s.rfind("error:", 0) == 0) {
+            st.state = UsbStickStatus::Error;
+            st.error = s.substr(s.find_first_not_of(' ', 6) == std::string::npos ? 6 : s.find_first_not_of(' ', 6));
+        } else if (s.rfind("ready", 0) == 0) {
+            st.state = UsbStickStatus::Ready;
+            // "configured" once the car (or a PC) has taken it up.
+            for (auto& n : list_dir("/sys/class/udc"))
+                if (read_str("/sys/class/udc/" + n + "/state") == "configured") st.state = UsbStickStatus::Attached;
+        }
+        return st;
+    }
+    void usb_stick_start() override { run("systemctl start --no-block zeroos-usb-stick.service"); }
+    void usb_stick_stop() override { run("systemctl stop --no-block zeroos-usb-stick.service"); }
+
+    // --- Camera: M5Stack's camera_app draws on the LCD itself. It reads the
+    // keyboard without grabbing it, so ZeroShell still sees key presses and
+    // keeps the screen awake (it ignores what they mean while handed off).
+    CameraStatus camera() override {
+        CameraStatus st;
+        st.installed = access(kCameraApp, X_OK) == 0;
+        // A sensor that answered at boot is bound to its driver.
+        for (const char* drv : {"imx219", "imx477", "imx708", "imx296", "ov5647", "ov9281"}) {
+            for (auto& n : list_dir(std::string("/sys/bus/i2c/drivers/") + drv))
+                if (n.find('-') != std::string::npos && std::isdigit((unsigned char)n[0])) st.present = true;
+        }
+        return st;
+    }
+    bool camera_open() override {
+#ifdef __EMSCRIPTEN__
+        return false;
+#else
+        if (camera_active()) return true;
+        if (access(kCameraApp, X_OK) != 0) return false;
+        const char* fb = std::getenv("ZS_FRAMEBUFFER");
+        cam_pid_ = spawn({"env", "CAMERA_APP_KEYBOARD_GRAB=0",
+                          std::string("CAMERA_APP_FB_DEVICE=") + (fb && fb[0] ? fb : "/dev/fb0"), kCameraApp});
+        return cam_pid_ > 0;
+#endif
+    }
+    bool camera_active() override {
+        if (cam_pid_ <= 0) return false;
+        if (exited(cam_pid_)) cam_pid_ = -1;
+        return cam_pid_ > 0;
+    }
+    void camera_close() override {
+        if (cam_pid_ <= 0) return;
+        kill_child(cam_pid_, SIGTERM);   // it saves and stops the sensor on SIGTERM
+        cam_pid_ = -1;
     }
 
     static std::string json_str(const std::string& js, const std::string& key) {

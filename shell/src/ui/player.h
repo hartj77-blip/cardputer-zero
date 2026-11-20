@@ -24,7 +24,8 @@ bool player_step(int dir);
 void player_stop();
 // What is playing or paused, or nullptr.
 const QueueItem* player_current();
-// From the shell's timer: moves on when a track ends.
+// From the shell's timer: moves on when a track ends, and obeys play/skip
+// buttons on a Bluetooth car stereo or headset.
 void player_tick();
 
 }  // namespace zs

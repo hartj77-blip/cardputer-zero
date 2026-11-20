@@ -24,7 +24,7 @@ radios, audio, camera, real-time clock, key LEDs and the expansion ports.
 Apps: **Terminal** (a real console on the built-in screen, with tmux), **Remote** (Tailscale sign-in by QR
 code, your devices, one-key SSH, remote desktop on a monitor, Taildrop), **Sync** (Notes, Documents and
 Recordings kept the same on your PC and phone with Syncthing), **GPS** and **Mesh** (Meshtastic
-text messaging over LoRa with the Cap LoRa-1262), **Files**, **Notes**, **Media** (music player, music from a Jellyfin server, voice notes), **Wi-Fi**, **IR Remote** (send + learn), **Compass** (with spirit level),
+text messaging over LoRa with the Cap LoRa-1262), **Car** (USB stick mode for a car stereo; Bluetooth audio with the car's play and skip buttons), **Camera** (M5's camera app: viewfinder, photos, gallery; full model only), **Files**, **Notes**, **Media** (music player, music from a Jellyfin server, voice notes), **Wi-Fi**, **IR Remote** (send + learn), **Compass** (with spirit level),
 **Battery** (time left, power draw, power profile), **Clock** (with stopwatch), **Dock** (desktop with web
 browser, video, terminal and files on an HDMI monitor), **System** monitor (CPU and
 where the memory goes), **Settings** (Wi-Fi, Bluetooth, brightness, volume, mute, power profile, screen dimming
@@ -79,6 +79,8 @@ first, copy `build/device/zeroshell` over, stop the stock launcher
 - [docs/HARDWARE.md](docs/HARDWARE.md): every chip, how Linux exposes it, known issues and our fixes
 - [docs/ROADMAP.md](docs/ROADMAP.md): phases and what's next
 - [docs/REMOTE.md](docs/REMOTE.md): Remote mode, Tailscale, Terminal and Taildrop
+- [docs/CAMERA.md](docs/CAMERA.md): the Camera app
+- [docs/CAR.md](docs/CAR.md): music in the car over USB or Bluetooth
 - [docs/JELLYFIN.md](docs/JELLYFIN.md): music from a Jellyfin server in the Media app
 - [docs/SYNC.md](docs/SYNC.md): Sync for Notes, Documents and Recordings
 - [docs/EXPANSION.md](docs/EXPANSION.md): GPS and LoRa modules on the expansion ports

@@ -239,11 +239,16 @@ void Shell::tick_cb(lv_timer_t* t) {
         mesh_seen = seq;
     }
     static int n = 0;
-    // Terminal closed (exit, or tmux detach with Alt+`): take the screen back.
-    if (s->handoff_ && lv_tick_elaps(s->handoff_since_) > 1500 && !hal().terminal_active()) {
-        s->handoff_ = false;
-        power().set_handoff(false);
-        s->screen_changed();
+    // Terminal closed (exit, or tmux detach with Alt+`) or camera app closed:
+    // take the screen back.
+    if (s->handoff_ && lv_tick_elaps(s->handoff_since_) > 1500) {
+        // Nobody is looking: don't leave the sensor running with the screen off.
+        if (s->handoff_camera_ && power().screen_off()) hal().camera_close();
+        if (!(s->handoff_camera_ ? hal().camera_active() : hal().terminal_active())) {
+            s->handoff_ = s->handoff_camera_ = false;
+            power().set_handoff(false);
+            s->screen_changed();
+        }
     }
     // Screen off or terminal: the timer runs every 500 ms and nothing is drawn.
     if (!power().screen_off() && !s->handoff_ && ++n % 10 == 0) s->update_statusbar();
@@ -355,6 +360,15 @@ bool Shell::open_terminal(const std::string& command) {
     return true;
 }
 
+bool Shell::open_camera() {
+    if (!hal().camera_open()) return false;
+    handoff_ = handoff_camera_ = true;
+    handoff_since_ = lv_tick_get();
+    power().set_handoff(true);
+    screen_changed();
+    return true;
+}
+
 void Shell::screen_changed() {
     lv_display_t* disp = lv_display_get_default();
     bool off = power().screen_off();
@@ -391,5 +405,6 @@ void shell_go_home() { Shell::get().go_home(); }
 void shell_add_focus(lv_obj_t* obj) { Shell::get().add_focus(obj); }
 void shell_screen_changed() { Shell::get().screen_changed(); }
 bool shell_open_terminal(const std::string& command) { return Shell::get().open_terminal(command); }
+bool shell_open_camera() { return Shell::get().open_camera(); }
 
 }  // namespace zs

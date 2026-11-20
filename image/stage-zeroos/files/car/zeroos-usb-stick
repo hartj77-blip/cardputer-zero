@@ -1,0 +1,133 @@
+#!/bin/bash
+# USB stick mode: the Cardputer shows up as a read-only USB stick holding a
+# copy of ~/Music, so a car stereo (or anything that plays from a stick) can
+# play it and its own buttons work. Run as root by zeroos-usb-stick.service.
+#
+#   zeroos-usb-stick start    build the music image if ~/Music changed, then
+#                             offer it on the USB device port
+#   zeroos-usb-stick stop     take it away again
+#   zeroos-usb-stick build IMAGE MUSIC_DIR    only build the image (tests)
+#
+# The board's Host/Slave switch (left side) must be on Slave; the right-hand
+# USB-C port is then the device port. Progress is written to $STATE for
+# ZeroShell: "building N", "ready", "attached" or "error: why".
+set -u
+export LC_ALL=C.UTF-8          # so accented file names survive the copy
+
+MUSIC=${ZEROOS_MUSIC:-/home/pi/Music}
+DIR=${ZEROOS_CAR_DIR:-/var/lib/zeroos/car}
+IMG=$DIR/music.img
+STAMP=$DIR/music.stamp
+STATE=${ZEROOS_CAR_STATE:-/run/zeroos/usb-stick.state}
+GADGET=/sys/kernel/config/usb_gadget/zeroos-stick
+START=2048                      # first sector of the FAT partition (1 MiB)
+EXTS='mp3|m4a|aac|wma|wav|flac|ogg|opus'
+
+say() { mkdir -p "$(dirname "$STATE")"; echo "$*" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"; }
+fail() { say "error: $*"; echo "zeroos-usb-stick: $*" >&2; exit 1; }
+
+# Music files under $1, sorted, as NUL-separated paths relative to it.
+music_files() {
+    (cd "$1" && find . -type f -regextype posix-extended -iregex ".*\.($EXTS)" -print0 | sort -z)
+}
+
+# Changes whenever a file is added, removed, renamed or rewritten.
+fingerprint() {
+    (cd "$1" 2>/dev/null && find . -type f -regextype posix-extended -iregex ".*\.($EXTS)" \
+        -printf '%p %s %T@\n' | sort | sha256sum | cut -d' ' -f1)
+}
+
+# build IMAGE MUSIC_DIR: a disk image with one FAT32 partition (older stereos
+# want a partition table) holding the music, in name order.
+build() {
+    local img=$1 src=$2 tmp=$1.new
+    [ -d "$src" ] || fail "no Music folder"
+    local count bytes
+    count=$(music_files "$src" | tr -cd '\0' | wc -c)
+    [ "$count" -gt 0 ] || fail "no music in ~/Music"
+    bytes=$(cd "$src" && music_files . | du -cb --files0-from=- | tail -1 | cut -f1)
+    # FAT32 needs at least ~33 MiB; add 3% and 16 MiB for its own tables.
+    local mib=$(( bytes / 1048576 * 103 / 100 + 16 ))
+    [ "$mib" -lt 40 ] && mib=40
+    local free_mib
+    free_mib=$(( $(df -B1048576 --output=avail "$(dirname "$img")" | tail -1) ))
+    [ -f "$img" ] && free_mib=$(( free_mib + $(du -m "$img" | cut -f1) ))
+    [ "$free_mib" -gt $(( mib + 200 )) ] || fail "not enough free space: needs $mib MB"
+
+    rm -f "$tmp" "$img"
+    truncate -s "$(( mib + 1 ))M" "$tmp" || fail "can't create the image"
+    echo "start=$START, type=c" | sfdisk -q "$tmp" >/dev/null 2>&1 || fail "can't partition the image"
+    mkfs.vfat -F 32 -n MUSIC --offset "$START" "$tmp" "$(( mib * 1024 ))" >/dev/null 2>&1 \
+        || fail "can't format the image"
+    local at="$tmp@@$(( START * 512 ))" n=0 rel dir made=" "
+    export MTOOLS_SKIP_CHECK=1
+    while IFS= read -r -d '' rel; do
+        rel=${rel#./}
+        dir=$(dirname "$rel")
+        if [ "$dir" != "." ] && [ "${made#* $dir }" = "$made" ]; then
+            # Make each folder on the way down, once.
+            local part="" piece
+            IFS=/ read -ra pieces <<< "$dir"
+            for piece in "${pieces[@]}"; do
+                part="$part/$piece"
+                mmd -i "$at" "::$part" 2>/dev/null || true
+            done
+            made="$made$dir "
+        fi
+        mcopy -i "$at" -o "$src/$rel" "::/$rel" 2>/dev/null || echo "zeroos-usb-stick: skipped $rel" >&2
+        n=$(( n + 1 ))
+        [ $(( n % 5 )) -eq 0 ] && say "building $(( n * 100 / count ))"
+    done < <(music_files "$src")
+    mv "$tmp" "$img"
+}
+
+udc() { ls /sys/class/udc 2>/dev/null | head -1; }
+
+stop() {
+    if [ -d "$GADGET" ]; then
+        echo "" > "$GADGET/UDC" 2>/dev/null || true
+        rm -f "$GADGET/configs/c.1/mass_storage.0"
+        rmdir "$GADGET/configs/c.1/strings/0x409" "$GADGET/configs/c.1" \
+              "$GADGET/functions/mass_storage.0" "$GADGET/strings/0x409" "$GADGET" 2>/dev/null || true
+    fi
+    rm -f "$STATE"
+}
+
+start() {
+    modprobe libcomposite 2>/dev/null || true
+    [ -n "$(udc)" ] || fail "no USB device port: set the switch on the left to Slave"
+    mkdir -p "$DIR"
+    local now
+    now=$(fingerprint "$MUSIC")
+    if [ ! -f "$IMG" ] || [ "$(cat "$STAMP" 2>/dev/null)" != "$now" ]; then
+        say "building 0"
+        build "$IMG" "$MUSIC"
+        echo "$now" > "$STAMP"
+    fi
+    stop
+    mkdir -p "$GADGET" || fail "USB device mode isn't available on this kernel"
+    cd "$GADGET" || fail "USB device mode isn't available on this kernel"
+    echo 0x1d6b > idVendor          # Linux Foundation
+    echo 0x0104 > idProduct
+    echo 0x0200 > bcdUSB
+    mkdir -p strings/0x409 configs/c.1/strings/0x409 functions/mass_storage.0
+    echo "ZeroOS" > strings/0x409/manufacturer
+    echo "Cardputer Music" > strings/0x409/product
+    tr -d '\n-' < /etc/machine-id | cut -c1-16 > strings/0x409/serialnumber
+    echo "Music" > configs/c.1/strings/0x409/configuration
+    echo 500 > configs/c.1/MaxPower     # ask the car for 500 mA
+    echo 1 > functions/mass_storage.0/lun.0/ro
+    echo 1 > functions/mass_storage.0/lun.0/removable
+    echo 0 > functions/mass_storage.0/lun.0/cdrom
+    echo "$IMG" > functions/mass_storage.0/lun.0/file || fail "can't offer the music image"
+    ln -s functions/mass_storage.0 configs/c.1/
+    udc > UDC || fail "the USB device port is busy"
+    say "ready"
+}
+
+case "${1:-}" in
+    start) start ;;
+    stop) stop ;;
+    build) build "$2" "$3" ;;
+    *) echo "usage: $0 start|stop|build IMAGE MUSIC_DIR" >&2; exit 2 ;;
+esac

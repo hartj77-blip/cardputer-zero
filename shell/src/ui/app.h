@@ -46,5 +46,7 @@ void shell_screen_changed();            // power manager: screen dimmed, off or 
 // Open the terminal on the built-in screen ("" = shell, or a command such as
 // "ssh desktop"). False in the simulator, which has no real console.
 bool shell_open_terminal(const std::string& command);
+// Hand the screen to the camera app until it exits. False if it can't start.
+bool shell_open_camera();
 
 }  // namespace zs

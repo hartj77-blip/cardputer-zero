@@ -1,5 +1,5 @@
 // Home screen, after Ubuntu's: wallpaper, a dock of favourites down the left
-// edge and the app grid in pages beside it.
+// edge and the app grid in pages of ten beside it.
 // Arrows move, Enter opens, 1-5 open the dock's apps (Ubuntu's Super+1..5),
 // typing a letter jumps to the next app that starts with it.
 #include <cctype>
@@ -14,10 +14,10 @@ using namespace theme;
 namespace {
 
 constexpr int kDockW = 32;
-constexpr int kCols = 4;
+constexpr int kCols = 5;
 constexpr int kRows = 2;
 constexpr int kPerPage = kCols * kRows;
-constexpr int kCellW = (kScreenW - kDockW) / kCols;   // 72
+constexpr int kCellW = (kScreenW - kDockW) / kCols;   // 57
 constexpr int kCellH = 66;
 constexpr int kGridY = 3;
 constexpr int kDotsY = kGridY + kRows * kCellH + 5;
@@ -94,10 +94,13 @@ public:
             int slot = i % kPerPage;
             lv_obj_t* cell = lv_obj_create(page_objs_[i / kPerPage]);
             style_highlight(cell, 10);
-            lv_obj_set_size(cell, kCellW - 4, kCellH - 4);
-            lv_obj_set_pos(cell, (slot % kCols) * kCellW + 2, kGridY + (slot / kCols) * kCellH + 2);
+            lv_obj_set_size(cell, kCellW - 1, kCellH - 4);
+            lv_obj_set_pos(cell, 1 + (slot % kCols) * kCellW, kGridY + (slot / kCols) * kCellH + 2);
             lv_obj_align(app_icon(cell, apps[i], 32), LV_ALIGN_TOP_MID, 0, 5);
             lv_obj_t* name = label(cell, apps[i].name.c_str(), &zs_font_12, 0xffffff);
+            // A name a hair wider than its cell ("IR Remote") is set tighter.
+            lv_obj_update_layout(name);
+            if (lv_obj_get_width(name) > kCellW - 3) lv_obj_set_style_text_letter_space(name, -1, 0);
             lv_obj_align(name, LV_ALIGN_BOTTOM_MID, 0, -5);
             cells_.push_back(cell);
         }

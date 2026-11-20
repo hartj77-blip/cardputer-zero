@@ -15,7 +15,7 @@ head -c 48213 /dev/zero > "$DEMO/Pictures/garden.jpg"
 echo "# my project" > "$DEMO/Projects/README.md"
 
 STEPS="shot:01-home.ppm"
-STEPS+=",right,right,right,right,right,right,right,right,right,right,shot:02-home-navigate.ppm"
+STEPS+=",right,right,right,right,right,right,right,right,right,right,right,right,shot:02-home-navigate.ppm"
 STEPS+=",enter,wait:300,shot:03-compass.ppm"
 STEPS+=",open:battery,shot:04-battery.ppm"
 STEPS+=",open:wifi,shot:05-wifi.ppm"
@@ -55,6 +55,10 @@ STEPS+=",enter,wait:300,type:john,enter,wait:300,type:secret,enter,wait:2500,sho
 STEPS+=",down,down,enter,wait:2500,shot:39-jellyfin-albums.ppm"
 STEPS+=",enter,wait:2500,down,enter,wait:2600,shot:40-jellyfin-playing.ppm"
 STEPS+=",home,wait:246000,up,open:media,right,right,wait:300,shot:41-jellyfin-screen-was-off.ppm,key:s"
+STEPS+=",open:camera,wait:300,shot:42-camera-preview.ppm,esc,wait:300,shot:43-camera.ppm"
+STEPS+=",open:car,wait:300,shot:44-car.ppm"
+STEPS+=",enter,wait:2500,shot:45-car-copying.ppm,wait:6000,shot:46-car-usb-in-use.ppm"
+STEPS+=",down,enter,wait:1500,shot:47-car-bluetooth.ppm,enter,wait:1500,enter"
 
 (cd "$OUT" && HOME="$DEMO" TZ=UTC "$BIN" --script "$STEPS")
 python3 "$HERE/ppm2png.py" "$OUT"

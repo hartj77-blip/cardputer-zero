@@ -20,6 +20,8 @@ std::unique_ptr<App> make_remote_app();
 std::unique_ptr<App> make_sync_app();
 std::unique_ptr<App> make_gps_app();
 std::unique_ptr<App> make_mesh_app();
+std::unique_ptr<App> make_camera_app();
+std::unique_ptr<App> make_car_app();
 
 const std::vector<AppInfo>& app_registry() {
     static const std::vector<AppInfo> apps = {
@@ -29,6 +31,8 @@ const std::vector<AppInfo>& app_registry() {
         {"files", "Files", LV_SYMBOL_DIRECTORY, 0xe95420, make_files_app},
         {"notes", "Notes", ZS_ICON_NOTE, 0xe0a100, make_notes_app},
         {"media", "Media", LV_SYMBOL_AUDIO, 0xd6336c, make_media_app},
+        {"camera", "Camera", ZS_ICON_CAMERA, 0x2f6f8f, make_camera_app},
+        {"car", "Car", ZS_ICON_CAR, 0x1e88a8, make_car_app},
         {"wifi", "Wi-Fi", LV_SYMBOL_WIFI, 0x0073e5, make_wifi_app},
         {"ir", "IR Remote", LV_SYMBOL_POWER, 0xc7162b, make_ir_app},
         {"gps", "GPS", ZS_ICON_PIN, 0x0e8420, make_gps_app},
