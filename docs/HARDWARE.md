@@ -18,10 +18,10 @@ Sources: [M5 CardputerZero docs](https://docs.m5stack.com/en/CardputerZero), M5'
 | IMU* | BMI270 + BMM150 | iio (`in_accel_*`, `in_anglvel_*`, `in_magn_*`) | Compass, level |
 | IR | TX + RX on GPIO | rc-core: `ir-ctl`, `ir-keytable` | IR Remote |
 | Audio | ES8389 codec, AW8737A amp, 1 W speaker, mic, TRRS | ALSA/PipeWire; sox `play`/`rec` | Media app (music, voice notes), volume, mute |
-| Wi-Fi / BT | BCM43439 2.4 GHz | NetworkManager, BlueZ | Wi-Fi app, Settings |
+| Wi-Fi / BT | BCM43439 2.4 GHz | NetworkManager, BlueZ | Wi-Fi app, Settings, Bluetooth audio in the Car app |
 | Ethernet | SR9900A (USB) | `eth0` | Status, System app |
-| USB | GL852G hub, USB-A, 2x USB-C, host/gadget switch | | Gadget modes: Phase 3 |
-| Camera* | IMX219 8 MP, CSI | libcamera (RPi fork): `rpicam-vid`, `rpicam-still` | Camera app (photos, QR codes), see CAMERA.md |
+| USB | GL852G hub, USB-A, 2x USB-C, Host/Slave switch (Slave: right USB-C is a device port) | `dwc2`, configfs gadgets | USB stick mode in the Car app, see CAR.md |
+| Camera* | IMX219 8 MP, CSI | libcamera (RPi fork) | Camera app (M5's CameraApp, started by ZeroShell; QR codes read by ZeroShell through `rpicam-vid`), see CAMERA.md |
 | Video | HDMI 1080p30, H.264 enc/dec | `/dev/fb1`, V4L2 M2M | Dock mode (labwc on the HDMI card only; mpv hardware H.264), see DOCK.md |
 | Storage | microSD | | Root filesystem |
 | Expansion | Grove HY2.0 (I2C/UART), 14-pin EXT bus | i2c-dev, spidev, UART | GPS app (gpsd), Mesh app (meshtasticd, Cap LoRa-1262); see EXPANSION.md |

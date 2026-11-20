@@ -1,12 +1,18 @@
-// Camera: a live picture, photos, and QR codes (docs/CAMERA.md).
-//   Enter  take a photo (saved to ~/Pictures)
-// A QR code in view is read at once and the picture freezes on it:
+// Camera: two things behind one icon (docs/CAMERA.md).
+//
+// Photos: M5Stack's CameraApp (MIT) does the real work: viewfinder, photos,
+// zoom and a gallery. ZeroShell starts it and steps aside, as it does for
+// the Terminal, and takes the screen back when it exits (hold 4 or Esc).
+// The image installs it as /usr/bin/camera_app.
+//
+// QR codes: ZeroShell's own reader, on this page under "Scan a QR code" (or
+// press Q). A code in view is read at once and the picture freezes on it:
 //   a Wi-Fi code (a phone's hotspot, a router's label)   Enter joins it
 //   a link                                               Enter opens it on the monitor (Dock mode)
 //   a Syncthing device ID                                Enter adds it to Sync
 //   anything                                             S saves the text to ~/Notes/scans.txt
-//   Esc goes back to the live picture.
-// The camera is off whenever the screen is, and when you leave.
+//   Esc scans again, then leaves the reader.
+// The reader's camera is off whenever the screen is, and when you leave.
 #include <sys/stat.h>
 
 #include <cstring>
@@ -19,6 +25,16 @@
 #include "ui/power.h"
 
 namespace zs {
+
+namespace {
+bool g_scan_first = false;
+}
+// Another app (Tether) asks for the reader, not the viewfinder.
+void camera_open_scanner() {
+    g_scan_first = true;
+    shell_open_app("camera");
+}
+
 namespace {
 using namespace theme;
 
@@ -76,54 +92,85 @@ std::string printable(const std::string& t, size_t max) {
 class CameraApp : public App {
 public:
     void build(lv_obj_t* root) override {
-        pix_.assign(size_t(kViewW) * kViewH, 0);
-        dsc_.header.magic = LV_IMAGE_HEADER_MAGIC;
-        dsc_.header.cf = LV_COLOR_FORMAT_RGB565;
-        dsc_.header.w = kViewW;
-        dsc_.header.h = kViewH;
-        dsc_.header.stride = kViewW * 2;
-        dsc_.data = reinterpret_cast<const uint8_t*>(pix_.data());
-        dsc_.data_size = uint32_t(pix_.size() * 2);
-        img_ = lv_image_create(root);
-        lv_image_set_src(img_, &dsc_);
-        lv_obj_set_pos(img_, 0, 0);
+        root_ = root;
+        CameraStatus st = hal().camera();
 
-        // Shown over the picture until the first frame, or with no camera.
-        wait_ = label(root, "", &zs_font_12, kMuted);
-        lv_obj_set_width(wait_, kViewW - 16);
-        lv_obj_set_style_text_align(wait_, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_align(wait_, LV_ALIGN_LEFT_MID, 8, 0);
+        lv_obj_t* panel = lv_obj_create(root);
+        style_panel(panel);
+        lv_obj_set_pos(panel, 6, 4);
+        lv_obj_set_size(panel, 308, kContentH - 10);
+        lv_obj_remove_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(panel, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_row(panel, 4, 0);
 
-        title_ = label(root, "", &zs_font_14, kAccent);
-        lv_obj_set_pos(title_, kSideX, 4);
-        body_ = label(root, "", &zs_font_12, kText);
-        lv_obj_set_pos(body_, kSideX, 26);
-        lv_obj_set_size(body_, kSideW, 72);
-        lv_label_set_long_mode(body_, LV_LABEL_LONG_WRAP);
-        hints_ = label(root, "", &zs_font_12, kMuted);
-        lv_obj_set_width(hints_, kSideW);
-        lv_obj_align(hints_, LV_ALIGN_BOTTOM_LEFT, kSideX, -4);
+        const char* head = !st.installed ? "Camera app missing"
+                           : st.present  ? "Camera ready"
+                                         : "No camera found";
+        label(panel, (std::string(ZS_ICON_CAMERA "  ") + head).c_str(), &zs_font_16,
+              st.installed && st.present ? kGood : kWarn);
+        const char* help = !st.installed
+                               ? "This image was built without the camera\napp. See docs/CAMERA.md."
+                           : st.present
+                               ? "Enter takes a photo. H shows every key\n(zoom, pan, gallery). Hold 4 for a second\n"
+                                 "to come back here."
+                               : "The Lite model has no camera. On the\nfull model, check the camera cable.\n"
+                                 "A USB camera also works: open, then U.";
+        lv_obj_t* h = label(panel, help, &zs_font_12, kMuted);
+        lv_obj_set_width(h, 290);
 
-        hal().camera_start();
-        show_live();
+        lv_obj_t* row = lv_obj_create(panel);
+        style_plain(row);
+        lv_obj_set_size(row, 296, 28);
+        lv_obj_remove_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        auto button = [&](const char* text, int x, int w, lv_event_cb_t cb) {
+            lv_obj_t* b = lv_button_create(row);
+            lv_obj_set_size(b, w, 26);
+            lv_obj_set_pos(b, x, 0);
+            lv_obj_set_style_bg_color(b, c(kSurface2), 0);
+            lv_obj_set_style_bg_color(b, c(kAccent), LV_STATE_FOCUSED);
+            lv_obj_set_style_text_color(b, c(kOnAccent), LV_STATE_FOCUSED);
+            lv_obj_t* l = lv_label_create(b);
+            lv_label_set_text(l, text);
+            lv_obj_center(l);
+            lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, this);
+            shell_add_focus(b);
+        };
+        button(LV_SYMBOL_PLAY "  Open camera", 0, 138, [](lv_event_t* e) {
+            static_cast<CameraApp*>(lv_event_get_user_data(e))->open();
+        });
+        // Deferred: the reader covers (and outlives) the button being clicked.
+        button(ZS_ICON_SEARCH "  Scan a QR code (Q)", 144, 152, [](lv_event_t* e) {
+            lv_async_call([](void* p) { static_cast<CameraApp*>(p)->start_scan(); }, lv_event_get_user_data(e));
+        });
+
+        if (g_scan_first) {
+            g_scan_first = false;
+            start_scan();
+        } else if (st.installed && st.present) {
+            // Picking Camera on the home screen goes straight to the viewfinder.
+            open();
+        }
     }
 
-    ~CameraApp() override { hal().camera_stop(); }
+    ~CameraApp() override {
+        lv_async_call_cancel([](void* p) { static_cast<CameraApp*>(p)->start_scan(); }, this);
+        if (scan_) hal().scan_stop();
+    }
 
     void tick() override {
-        if (!result_.empty()) return;   // frozen on a code; the camera is off
-        if (power().screen_off()) {     // nobody is looking: don't run the camera
-            if (hal().camera_state() != CamState::Off) hal().camera_stop();
+        if (!scan_ || !result_.empty()) return;   // not reading, or frozen on a code
+        if (power().screen_off()) {               // nobody is looking: don't run the camera
+            if (hal().scan_state() != CamState::Off) hal().scan_stop();
             slept_ = true;
             return;
         }
         if (slept_) {
             slept_ = false;
-            hal().camera_start();
+            hal().scan_start();
         }
         CameraFrame f;
-        bool got = hal().camera_frame(f);
-        CamState st = hal().camera_state();
+        bool got = hal().scan_frame(f);
+        CamState st = hal().scan_state();
         if (st != state_) {
             state_ = st;
             lv_label_set_text(wait_, st == CamState::NoCamera
@@ -142,36 +189,129 @@ public:
     }
 
     bool on_key(uint32_t key) override {
-        if (result_.empty()) {
-            if (key != LV_KEY_ENTER) return false;
-            take_photo();
+        if (!scan_) {
+            if (fake_ || (key != 'q' && key != 'Q')) return false;
+            start_scan();
             return true;
         }
-        if (key == 's' || key == 'S') {
-            save_text();
-            return true;
+        if (key == LV_KEY_ESC) return false;   // on_back()
+        if (!result_.empty()) {
+            if (key == 's' || key == 'S') save_text();
+            else if (key == LV_KEY_ENTER) act();
         }
-        if (key != LV_KEY_ENTER) return false;
-        act();
-        return true;
+        return true;   // the page's buttons are underneath: keep keys from them
     }
 
     bool on_back() override {
-        if (result_.empty()) return false;
-        result_.clear();
-        hal().camera_start();
-        show_live();
-        return true;
+        if (fake_) {
+            lv_obj_delete(fake_);
+            fake_ = nullptr;
+            return true;
+        }
+        if (scan_ && !result_.empty()) {   // back to the live picture
+            result_.clear();
+            hal().scan_start();
+            show_live();
+            return true;
+        }
+        if (scan_) {
+            hal().scan_stop();
+            lv_obj_delete(scan_);
+            scan_ = nullptr;
+            return true;
+        }
+        return false;
     }
 
 private:
     enum class Kind { Text, Wifi, Link, SyncId };
 
+    void open() {
+        if (shell_open_camera()) return;
+        if (hal().camera().simulated) show_fake();
+        else shell_toast("The camera app didn't start");
+    }
+
+    // Simulator: roughly what the viewfinder looks like.
+    void show_fake() {
+        if (fake_) return;
+        fake_ = lv_obj_create(root_);
+        style_plain(fake_);
+        lv_obj_set_size(fake_, kScreenW, kContentH);
+        lv_obj_set_style_bg_color(fake_, c(0x101418), 0);
+        lv_obj_set_style_bg_grad_color(fake_, c(0x2a3b4d), 0);
+        lv_obj_set_style_bg_grad_dir(fake_, LV_GRAD_DIR_VER, 0);
+        lv_obj_set_style_bg_opa(fake_, LV_OPA_COVER, 0);
+        lv_obj_remove_flag(fake_, LV_OBJ_FLAG_SCROLLABLE);
+        // Focus brackets in the middle.
+        lv_obj_t* frame = lv_obj_create(fake_);
+        style_plain(frame);
+        lv_obj_set_size(frame, 90, 64);
+        lv_obj_center(frame);
+        lv_obj_set_style_border_color(frame, c(0xffffff), 0);
+        lv_obj_set_style_border_width(frame, 1, 0);
+        lv_obj_set_style_border_opa(frame, LV_OPA_60, 0);
+        lv_obj_set_style_radius(frame, 4, 0);
+        lv_obj_t* t = label(fake_, "[simulator] On the Cardputer this is the live\nviewfinder. Esc closes this preview.",
+                            &zs_font_12, 0xffffff);
+        lv_obj_align(t, LV_ALIGN_BOTTOM_LEFT, 8, -6);
+        lv_obj_t* z = label(fake_, "1.0x", &zs_font_12, 0xffffff);
+        lv_obj_align(z, LV_ALIGN_TOP_RIGHT, -8, 6);
+    }
+
+    // The QR reader: a live picture on the left, what it found on the right.
+    void start_scan() {
+        if (scan_) return;
+        if (fake_) {
+            lv_obj_delete(fake_);
+            fake_ = nullptr;
+        }
+        scan_ = lv_obj_create(root_);
+        style_plain(scan_);
+        lv_obj_set_size(scan_, kScreenW, kContentH);
+        lv_obj_set_style_bg_color(scan_, c(kBg), 0);
+        lv_obj_set_style_bg_opa(scan_, LV_OPA_COVER, 0);
+        lv_obj_remove_flag(scan_, LV_OBJ_FLAG_SCROLLABLE);
+
+        pix_.assign(size_t(kViewW) * kViewH, 0);
+        dsc_.header.magic = LV_IMAGE_HEADER_MAGIC;
+        dsc_.header.cf = LV_COLOR_FORMAT_RGB565;
+        dsc_.header.w = kViewW;
+        dsc_.header.h = kViewH;
+        dsc_.header.stride = kViewW * 2;
+        dsc_.data = reinterpret_cast<const uint8_t*>(pix_.data());
+        dsc_.data_size = uint32_t(pix_.size() * 2);
+        img_ = lv_image_create(scan_);
+        lv_image_set_src(img_, &dsc_);
+        lv_obj_set_pos(img_, 0, 0);
+
+        // Shown over the picture until the first frame, or with no camera.
+        wait_ = label(scan_, "", &zs_font_12, kMuted);
+        lv_obj_set_width(wait_, kViewW - 16);
+        lv_obj_set_style_text_align(wait_, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_align(wait_, LV_ALIGN_LEFT_MID, 8, 0);
+
+        title_ = label(scan_, "", &zs_font_14, kAccent);
+        lv_obj_set_pos(title_, kSideX, 4);
+        body_ = label(scan_, "", &zs_font_12, kText);
+        lv_obj_set_pos(body_, kSideX, 26);
+        lv_obj_set_size(body_, kSideW, 72);
+        lv_label_set_long_mode(body_, LV_LABEL_LONG_WRAP);
+        hints_ = label(scan_, "", &zs_font_12, kMuted);
+        lv_obj_set_width(hints_, kSideW);
+        lv_obj_align(hints_, LV_ALIGN_BOTTOM_LEFT, kSideX, -4);
+
+        result_.clear();
+        seq_ = 0;
+        slept_ = false;
+        hal().scan_start();
+        show_live();
+    }
+
     void show_live() {
-        lv_label_set_text(title_, "Camera");
-        lv_label_set_text(body_, last_photo_.empty() ? "Point it at a QR code to read it."
-                                                       : ("Saved " + last_photo_).c_str());
-        lv_label_set_text(hints_, "Enter  photo");
+        lv_label_set_text(title_, "Scan");
+        lv_label_set_text(body_, "Point it at a QR code.");
+        lv_label_set_text(hints_, "Esc  back");
         state_ = CamState::Off;   // so tick() puts the right message up
     }
 
@@ -214,9 +354,8 @@ private:
             line(r.x[i] * kViewW / f.w, r.y[i] * kViewH / f.h, r.x[j] * kViewW / f.w, r.y[j] * kViewH / f.h, 0x07e0);
         }
         result_ = r.text;
-        hal().camera_stop();   // the frozen picture stays; no need to keep the sensor on
+        hal().scan_stop();   // the frozen picture stays; no need to keep the sensor on
         hal().beep(1760, 50);
-        lv_label_set_text(wait_, "");
 
         WifiCode w;
         std::string body, enter;
@@ -241,7 +380,7 @@ private:
             body = printable(result_, 90);
         }
         lv_label_set_text(body_, body.c_str());
-        lv_label_set_text(hints_, (enter + "S  save   Esc  back").c_str());
+        lv_label_set_text(hints_, (enter + "S  save   Esc  again").c_str());
     }
 
     void act() {
@@ -279,25 +418,9 @@ private:
         shell_toast(f ? "Saved to Notes/scans.txt" : "Couldn't save to ~/Notes");
     }
 
-    void take_photo() {
-        if (state_ != CamState::Running) {
-            shell_toast(state_ == CamState::NoCamera ? "No camera" : "The camera is still starting");
-            return;
-        }
-        shell_toast("Taking a photo...");
-        lv_refr_now(nullptr);   // it takes a couple of seconds: show the notice first
-        std::string path = hal().camera_photo();
-        if (path.empty()) {
-            shell_toast("Couldn't take the photo");
-        } else {
-            last_photo_ = path.substr(path.rfind('/') + 1);
-            shell_toast("Saved to Pictures");
-            hal().beep(1320, 40);
-        }
-        hal().camera_start();
-        show_live();
-    }
-
+    lv_obj_t* root_ = nullptr;
+    lv_obj_t* fake_ = nullptr;
+    lv_obj_t* scan_ = nullptr;   // the reader's page, over the rest
     std::vector<uint16_t> pix_;
     lv_image_dsc_t dsc_{};
     lv_obj_t *img_ = nullptr, *wait_ = nullptr, *title_ = nullptr, *body_ = nullptr, *hints_ = nullptr;
@@ -305,7 +428,7 @@ private:
     uint32_t seq_ = 0;
     int frames_ = 0;
     bool slept_ = false;
-    std::string result_, last_photo_;
+    std::string result_;
     Kind kind_ = Kind::Text;
 };
 }  // namespace

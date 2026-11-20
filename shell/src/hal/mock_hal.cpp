@@ -321,7 +321,7 @@ public:
     // Camera, simulated: a desk with a card that slides into view. The card
     // carries a real QR code (a different one each time the camera opens),
     // so the app's reader is exercised end to end.
-    void camera_start() override {
+    void scan_start() override {
         if (cam_on_) return;
         cam_on_ = true;
         cam_clock_.start();
@@ -334,13 +334,13 @@ public:
         };
         cam_text_ = kScenes[cam_scene_++ % 3];
     }
-    void camera_stop() override { cam_on_ = false; }
-    CamState camera_state() override {
+    void scan_stop() override { cam_on_ = false; }
+    CamState scan_state() override {
         if (!cam_on_) return CamState::Off;
         return cam_clock_.ms() < 600 ? CamState::Starting : CamState::Running;
     }
-    bool camera_frame(CameraFrame& out) override {
-        if (camera_state() != CamState::Running) return false;
+    bool scan_frame(CameraFrame& out) override {
+        if (scan_state() != CamState::Running) return false;
         long t = cam_clock_.ms();
         if (t - cam_drawn_ >= 100) {
             cam_drawn_ = t;
@@ -354,12 +354,6 @@ public:
         out.v = out.u + kCamW * kCamH / 4;
         out.seq = cam_seq_;
         return true;
-    }
-    std::string camera_photo() override {
-        cam_on_ = false;
-        char name[64];
-        std::snprintf(name, sizeof name, "/home/pi/Pictures/photo-%03d.jpg", ++photo_count_);
-        return name;
     }
     void draw_scene(long t) {
         cam_.resize(size_t(kCamW) * kCamH * 3 / 2);
@@ -603,11 +597,62 @@ public:
         return true;
     }
 
+    // A pretend car and headphones; pairing always works.
+    std::vector<BtDevice> bt_devices() override { return bt_; }
+    void bt_scan() override {
+        if (bt_.size() < 3) bt_.push_back({"00:1A:7D:DA:71:13", "Kitchen speaker", false, false});
+    }
+    bool bt_connect(const std::string& address, std::string&) override {
+        for (auto& d : bt_) {
+            d.connected = d.address == address;
+            d.paired = d.paired || d.connected;
+        }
+        return true;
+    }
+    void bt_disconnect(const std::string& address) override {
+        for (auto& d : bt_) if (d.address == address) d.connected = false;
+    }
+    void bt_forget(const std::string& address) override {
+        for (size_t i = 0; i < bt_.size(); ++i) if (bt_[i].address == address) { bt_.erase(bt_.begin() + long(i)); break; }
+    }
+    void bt_set_visible(int) override {}
+    MediaKey media_key() override { return MediaKey::None; }
+
+    // The copy takes a few seconds, then the "car" takes the stick.
+    UsbStickStatus usb_stick() override {
+        UsbStickStatus st;
+        if (!stick_on_) return st;
+        long ms = stick_clock_.ms();
+        if (ms < 4000) {
+            st.state = UsbStickStatus::Building;
+            st.percent = int(ms / 40);
+        } else {
+            st.state = ms < 7000 ? UsbStickStatus::Ready : UsbStickStatus::Attached;
+        }
+        return st;
+    }
+    void usb_stick_start() override {
+        stick_on_ = true;
+        stick_clock_.start();
+    }
+    void usb_stick_stop() override { stick_on_ = false; }
+
+    CameraStatus camera() override { return {true, true, true}; }
+    bool camera_open() override { return false; }
+    bool camera_active() override { return false; }
+    void camera_close() override {}
+
     void power_off() override { std::printf("[mock] power off\n"); }
     void reboot() override { std::printf("[mock] reboot\n"); }
     void beep(int, int) override {}
 
 private:
+    std::vector<BtDevice> bt_ = {
+        {"F4:4E:FD:12:9A:0C", "Car Multimedia", true, false},
+        {"AC:12:2F:5B:E0:41", "Headphones", true, false},
+    };
+    bool stick_on_ = false;
+    PlayClock stick_clock_;
     PlaybackState pb_;
     PlayClock clock_, rec_clock_;
     RecordState rec_;
@@ -644,7 +689,7 @@ private:
     PlayClock cam_clock_;
     long cam_drawn_ = 0;
     uint32_t cam_seq_ = 0;
-    int cam_scene_ = 0, photo_count_ = 0;
+    int cam_scene_ = 0;
     std::string cam_text_;
     std::vector<uint8_t> cam_;
     std::vector<TetherPhone> tether_phones_, tether_found_;

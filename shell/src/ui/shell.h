@@ -30,7 +30,9 @@ public:
     // Hand the screen to the Linux console terminal (see Hal::terminal_open)
     // and take it back when the terminal closes.
     bool open_terminal(const std::string& command);
-    bool in_terminal() const { return handoff_; }
+    bool in_terminal() const { return handoff_ && !handoff_camera_; }
+    // The same, for the camera app (see Hal::camera_open).
+    bool open_camera();
     const std::string& current_app() const { return app_id_; }
 
 private:
@@ -50,6 +52,7 @@ private:
     lv_obj_t* blank_ = nullptr;     // simulator only: stands in for the backlight
     lv_timer_t* tick_timer_ = nullptr;
     bool handoff_ = false;
+    bool handoff_camera_ = false;   // handed to the camera app, not the terminal
     uint32_t handoff_since_ = 0;
     uint32_t toast_until_ = 0;
     lv_indev_t* keypad_ = nullptr;

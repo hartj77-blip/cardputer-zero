@@ -150,7 +150,7 @@ struct MeshMessage {
     long time = 0;            // unix time
 };
 
-// Camera (IMX219; not on the CardputerZero Lite). Preview frames are 640x480
+// Pictures from the camera for the QR reader: 640x480
 // planar YUV (I420): w*h luma bytes, then two quarter-size colour planes.
 enum class CamState { Off, Starting, Running, NoCamera };
 
@@ -187,6 +187,30 @@ struct IrCode {
     std::string name;
     std::string protocol;   // nec, rc5, sony12, raw...
     unsigned scancode = 0;
+};
+
+// A Bluetooth speaker, headset or car stereo.
+struct BtDevice {
+    std::string address;      // AA:BB:CC:DD:EE:FF
+    std::string name;
+    bool paired = false;
+    bool connected = false;
+};
+
+// USB stick mode: the device port offers a copy of ~/Music to a car stereo.
+struct UsbStickStatus {
+    enum State { Off, Building, Ready, Attached, Error } state = Off;
+    int percent = 0;          // Building: how far the music copy has got
+    std::string error;        // Error: a short reason
+};
+
+// Play/skip buttons on a car stereo or headset (Bluetooth), or a USB keyboard.
+enum class MediaKey { None, PlayPause, Play, Pause, Stop, Next, Previous };
+
+struct CameraStatus {
+    bool installed = false;   // the camera app is on this image
+    bool present = false;     // a camera sensor answered (never on the Lite)
+    bool simulated = false;   // the simulator: nothing real to open
 };
 
 struct Track {
@@ -310,15 +334,14 @@ public:
     virtual GpsFix gps() = 0;
     virtual void gps_stop() = 0;
 
-    // Camera. start() opens the preview (about a second); frame() gives the
-    // newest picture and keeps the camera on while it keeps being called;
-    // photo() saves a JPEG to ~/Pictures and returns its path ("" on failure;
-    // takes a couple of seconds and ends the preview).
-    virtual void camera_start() = 0;
-    virtual void camera_stop() = 0;
-    virtual CamState camera_state() = 0;
-    virtual bool camera_frame(CameraFrame& out) = 0;
-    virtual std::string camera_photo() = 0;
+    // QR scanning: ZeroShell's own look through the camera (the camera app
+    // above must be closed; one program can hold the sensor). scan_start()
+    // opens it (about a second); scan_frame() gives the newest picture and
+    // keeps the camera on while it keeps being called.
+    virtual void scan_start() = 0;
+    virtual void scan_stop() = 0;
+    virtual CamState scan_state() = 0;
+    virtual bool scan_frame(CameraFrame& out) = 0;
 
     // Tethering. tether() is cheap and refreshes in the background while it
     // keeps being called. The actions return at once; watch busy and error.
@@ -345,6 +368,14 @@ public:
     // backend has no real terminal (the simulator).
     virtual bool terminal_open(const std::string& command) = 0;
     virtual bool terminal_active() = 0;
+
+    // Camera: hands the screen to M5Stack's camera app (viewfinder, photos,
+    // gallery) until it exits. camera_open is false if it can't start, as
+    // in the simulator.
+    virtual CameraStatus camera() = 0;
+    virtual bool camera_open() = 0;
+    virtual bool camera_active() = 0;
+    virtual void camera_close() = 0;
     virtual int volume() = 0;                // 0..100
     virtual void set_volume(int pct) = 0;
     virtual bool muted() = 0;
@@ -366,6 +397,22 @@ public:
                                 const std::string& device_id, JfSession& out, std::string& error) = 0;
     virtual bool jellyfin_list(const JfSession& s, JfView view, const std::string& arg, std::vector<JfItem>& out,
                                std::string& error) = 0;
+
+    // Bluetooth audio out. bt_scan and bt_connect wait: about 8 and up to
+    // 40 seconds. Connecting pairs first if needed; sound then follows.
+    virtual std::vector<BtDevice> bt_devices() = 0;       // paired, and seen by the last scan
+    virtual void bt_scan() = 0;
+    virtual bool bt_connect(const std::string& address, std::string& error) = 0;
+    virtual void bt_disconnect(const std::string& address) = 0;
+    virtual void bt_forget(const std::string& address) = 0;
+    // Let a car find and pair with us from its own screen, for seconds.
+    virtual void bt_set_visible(int seconds) = 0;
+    // The next play/skip button press, or None. Call until None.
+    virtual MediaKey media_key() = 0;
+
+    virtual UsbStickStatus usb_stick() = 0;
+    virtual void usb_stick_start() = 0;
+    virtual void usb_stick_stop() = 0;
 
     // Voice notes from the MEMS mic, saved to ~/Recordings as 16 kHz mono WAV.
     virtual std::vector<Track> recordings() = 0;          // newest first

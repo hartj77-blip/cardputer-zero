@@ -12,6 +12,9 @@
 #include "apps/common.h"
 
 namespace zs {
+
+void camera_open_scanner();   // apps/camera.cpp
+
 namespace {
 using namespace theme;
 
@@ -125,7 +128,7 @@ private:
         list_button(list_, LV_SYMBOL_WIFI, "Wi-Fi hotspot: pick it in Wi-Fi",
                     [](lv_event_t*) { shell_open_app("wifi"); }, nullptr);
         list_button(list_, ZS_ICON_CAMERA, "Wi-Fi hotspot: scan its QR code",
-                    [](lv_event_t*) { shell_open_app("camera"); }, nullptr);
+                    [](lv_event_t*) { camera_open_scanner(); }, nullptr);
 
         std::string usb = "USB: plug in the phone";
         if (st_.usb) usb = "USB: " + st_.usb_name + (st_.usb_ip.empty() ? "   not sharing yet" : "   online");

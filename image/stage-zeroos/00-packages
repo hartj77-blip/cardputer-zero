@@ -34,4 +34,9 @@ syncthing
 python3
 gpsd
 gpsd-clients
+mtools
+dosfstools
+fdisk
+libspa-0.2-bluetooth
+pipewire-alsa
 usbmuxd

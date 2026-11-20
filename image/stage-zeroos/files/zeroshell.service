@@ -6,7 +6,7 @@ Conflicts=getty@tty1.service
 [Service]
 User=pi
 Group=pi
-SupplementaryGroups=video input audio netdev i2c gpio
+SupplementaryGroups=video input audio netdev i2c gpio bluetooth
 Environment=HOME=/home/pi
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 # tty1 is ours: ZeroShell puts it in graphics mode with the keyboard off, so

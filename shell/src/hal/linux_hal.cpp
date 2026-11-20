@@ -9,7 +9,7 @@
 //   Bluetooth  bluetoothctl / rfkill
 //   audio      wpctl (PipeWire), falls back to amixer
 //   IR         ir-ctl / ir-keytable (rc-core, gpio-ir-tx / gpio-ir-recv)
-//   camera     rpicam-vid (preview frames on a pipe), rpicam-still (photos)
+//   QR codes   rpicam-vid (preview frames on a pipe)
 //   tethering  /usr/bin/zeroos-tether (bluetoothctl + nmcli), run in the background
 //   media      sox: `play` for mp3/flac/ogg/wav, `rec` for voice notes, `soxi` for
 //              durations. One small process per stream; pause = SIGSTOP/SIGCONT.
@@ -18,6 +18,10 @@
 // None of this is verified on hardware yet (Phase 1 bring-up).
 #include <dirent.h>
 #include <fcntl.h>
+#ifndef __EMSCRIPTEN__
+#include <linux/input.h>   // media keys from a Bluetooth car or headset
+#include <sys/ioctl.h>
+#endif
 #include <signal.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -216,7 +220,7 @@ std::string find_power_supply() {
 class LinuxHal : public Hal {
 public:
     ~LinuxHal() override {
-        camera_stop();
+        scan_stop();
         tether_end();
         gps_stop();
         stop();
@@ -247,7 +251,7 @@ public:
         if (gps_fd_ >= 0 && time(nullptr) - gps_want_ > 5) gps_stop();
         mesh_pump();
         // Nobody has looked through the camera for 3 s: turn it off.
-        if (cam_pid_ > 0 && time(nullptr) - cam_want_ > 3) camera_stop();
+        if (scan_pid_ > 0 && time(nullptr) - scan_want_ > 3) scan_stop();
         tether_pump();
         // Battery and IMU are cheap sysfs reads; cache them per poll.
         bat_cache_ = read_battery();
@@ -586,7 +590,10 @@ private:
     long long cpu_prev_[2] = {0, 0};
     std::vector<ProcMem> top_;
     int top_calls_ = 0;
-    pid_t play_pid_ = -1, rec_pid_ = -1;
+    pid_t play_pid_ = -1, rec_pid_ = -1, cam_pid_ = -1, visible_pid_ = -1;
+    std::vector<int> media_fds_;
+    time_t media_scan_ = 0;
+    static constexpr const char* kCameraApp = "/usr/bin/camera_app";
     PlaybackState pb_;
     RecordState rec_;
     PlayClock clock_, rec_clock_;
@@ -868,87 +875,69 @@ private:
         return end == p ? def : v;
     }
 
-    // --- Camera. The preview is rpicam-vid writing raw 640x480 YUV frames to
+    // --- QR scanning. The preview is rpicam-vid writing raw 640x480 YUV frames to
     // a pipe, ten a second; we keep the newest whole one. (640 is a multiple
     // of 64, so the frames have no padding between rows.) To confirm on
     // hardware: which way up the picture is.
-    static constexpr int kCamW = 640, kCamH = 480;
-    static constexpr size_t kCamBytes = size_t(kCamW) * kCamH * 3 / 2;
-    void camera_start() override {
-        if (cam_pid_ > 0) return;
-        cam_pid_ = spawn_pipe({"rpicam-vid", "--nopreview", "--timeout", "0", "--codec", "yuv420", "--width",
-                               std::to_string(kCamW), "--height", std::to_string(kCamH), "--framerate", "10",
+    static constexpr int kScanW = 640, kScanH = 480;
+    static constexpr size_t kScanBytes = size_t(kScanW) * kScanH * 3 / 2;
+    void scan_start() override {
+        if (scan_pid_ > 0) return;
+        scan_pid_ = spawn_pipe({"rpicam-vid", "--nopreview", "--timeout", "0", "--codec", "yuv420", "--width",
+                               std::to_string(kScanW), "--height", std::to_string(kScanH), "--framerate", "10",
                                "--output", "-"},
-                              cam_fd_);
-        cam_state_ = cam_pid_ > 0 ? CamState::Starting : CamState::NoCamera;
-        if (cam_pid_ <= 0) return;
+                              scan_fd_);
+        scan_state_ = scan_pid_ > 0 ? CamState::Starting : CamState::NoCamera;
+        if (scan_pid_ <= 0) return;
 #ifdef F_SETPIPE_SZ
-        if (fcntl(cam_fd_, F_SETPIPE_SZ, 1 << 20) < 0) {}   // room for two frames
+        if (fcntl(scan_fd_, F_SETPIPE_SZ, 1 << 20) < 0) {}   // room for two frames
 #endif
-        cam_back_.resize(kCamBytes);
-        cam_front_.resize(kCamBytes);
-        cam_fill_ = 0;
-        cam_seq_ = 0;
-        cam_want_ = time(nullptr);
+        scan_back_.resize(kScanBytes);
+        scan_front_.resize(kScanBytes);
+        scan_fill_ = 0;
+        scan_seq_ = 0;
+        scan_want_ = time(nullptr);
     }
-    void camera_stop() override {
-        kill_child(cam_pid_, SIGTERM);
-        cam_pid_ = -1;
-        if (cam_fd_ >= 0) close(cam_fd_);
-        cam_fd_ = -1;
-        cam_state_ = CamState::Off;
+    void scan_stop() override {
+        kill_child(scan_pid_, SIGTERM);
+        scan_pid_ = -1;
+        if (scan_fd_ >= 0) close(scan_fd_);
+        scan_fd_ = -1;
+        scan_state_ = CamState::Off;
     }
-    CamState camera_state() override { return cam_state_; }
-    bool camera_frame(CameraFrame& out) override {
-        cam_want_ = time(nullptr);
-        if (cam_pid_ <= 0 || cam_fd_ < 0) return false;
+    CamState scan_state() override { return scan_state_; }
+    bool scan_frame(CameraFrame& out) override {
+        scan_want_ = time(nullptr);
+        if (scan_pid_ <= 0 || scan_fd_ < 0) return false;
         for (;;) {
-            ssize_t n = read(cam_fd_, cam_back_.data() + cam_fill_, kCamBytes - cam_fill_);
+            ssize_t n = read(scan_fd_, scan_back_.data() + scan_fill_, kScanBytes - scan_fill_);
             if (n > 0) {
-                cam_fill_ += size_t(n);
-                if (cam_fill_ == kCamBytes) {
-                    cam_front_.swap(cam_back_);
-                    cam_fill_ = 0;
-                    ++cam_seq_;
-                    cam_state_ = CamState::Running;
+                scan_fill_ += size_t(n);
+                if (scan_fill_ == kScanBytes) {
+                    scan_front_.swap(scan_back_);
+                    scan_fill_ = 0;
+                    ++scan_seq_;
+                    scan_state_ = CamState::Running;
                 }
                 continue;
             }
             if (n == 0 || (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)) {
                 // rpicam-vid gave up: no camera (the Lite model), or it's in use.
-                camera_stop();
-                cam_state_ = CamState::NoCamera;
+                scan_stop();
+                scan_state_ = CamState::NoCamera;
                 return false;
             }
             break;
         }
-        if (!cam_seq_) return false;
-        out.w = kCamW;
-        out.h = kCamH;
-        out.y = cam_front_.data();
-        out.u = out.y + kCamW * kCamH;
-        out.v = out.u + kCamW * kCamH / 4;
-        out.seq = cam_seq_;
+        if (!scan_seq_) return false;
+        out.w = kScanW;
+        out.h = kScanH;
+        out.y = scan_front_.data();
+        out.u = out.y + kScanW * kScanH;
+        out.v = out.u + kScanW * kScanH / 4;
+        out.seq = scan_seq_;
         return true;
     }
-    std::string camera_photo() override {
-        camera_stop();   // one program can hold the camera at a time
-        std::string dir = home() + "/Pictures";
-        mkdir(dir.c_str(), 0755);
-        char name[64];
-        time_t now = time(nullptr);
-        tm lt{};
-        localtime_r(&now, &lt);
-        strftime(name, sizeof name, "/photo-%Y%m%d-%H%M%S.jpg", &lt);
-        std::string path = dir + name;
-        // 1640x1232 is the sensor's binned mode: quick, and light on memory.
-        // The second lets exposure and white balance settle.
-        run("rpicam-still --nopreview --timeout 1000 --width 1640 --height 1232 --quality 90 --output " +
-            shell_quote(path));
-        struct stat st{};
-        return stat(path.c_str(), &st) == 0 && st.st_size > 0 ? path : "";
-    }
-
     // --- Tethering. zeroos-tether prints tab-separated lines and always ends
     // with the current state ("bt", "usb", "phone" lines, then "end"). It can
     // take many seconds (a search, pairing), so it runs in the background
@@ -1219,6 +1208,202 @@ private:
         return term_cache_;
     }
 
+    // --- Bluetooth audio out (docs/CAR.md). bluetoothctl does the pairing;
+    // PipeWire's Bluetooth module sends the sound once a device connects.
+    static bool is_address(const std::string& a) {
+        if (a.size() != 17) return false;
+        for (size_t i = 0; i < 17; ++i) {
+            if (i % 3 == 2 ? a[i] != ':' : !std::isxdigit((unsigned char)a[i])) return false;
+        }
+        return true;
+    }
+    // "Device AA:BB:CC:DD:EE:FF Name with spaces" lines.
+    static void parse_bt(const std::string& out, std::vector<BtDevice>& v, bool paired, bool connected) {
+        std::istringstream in(out);
+        for (std::string l; std::getline(in, l);) {
+            if (l.rfind("Device ", 0) != 0 || l.size() < 24) continue;
+            std::string addr = l.substr(7, 17);
+            if (!is_address(addr)) continue;
+            std::string name = l.size() > 25 ? l.substr(25) : addr;
+            BtDevice* d = nullptr;
+            for (auto& x : v)
+                if (x.address == addr) d = &x;
+            if (!d) {
+                // Devices that only announce an address are not speakers or cars.
+                std::string dashed = addr;
+                for (auto& ch : dashed) if (ch == ':') ch = '-';
+                if (!paired && (name == addr || name == dashed)) continue;
+                v.push_back({addr, name, false, false});
+                d = &v.back();
+            }
+            d->paired = d->paired || paired;
+            d->connected = d->connected || connected;
+        }
+    }
+    std::vector<BtDevice> bt_devices() override {
+        std::vector<BtDevice> v;
+        parse_bt(run("bluetoothctl devices Connected"), v, true, true);
+        parse_bt(run("bluetoothctl devices Paired"), v, true, false);
+        parse_bt(run("bluetoothctl devices"), v, false, false);
+        std::stable_sort(v.begin(), v.end(), [](const BtDevice& a, const BtDevice& b) {
+            return a.connected != b.connected ? a.connected : a.paired != b.paired ? a.paired : false;
+        });
+        return v;
+    }
+    void bt_scan() override {
+        run("rfkill unblock bluetooth");
+        run("bluetoothctl power on");
+        run("bluetoothctl --timeout 8 scan on");
+    }
+    bool bt_connect(const std::string& address, std::string& error) override {
+        if (!is_address(address)) {
+            error = "Not a Bluetooth address";
+            return false;
+        }
+        run("rfkill unblock bluetooth");
+        run("bluetoothctl power on");
+        std::string info = run("bluetoothctl info " + address);
+        if (info.find("Paired: yes") == std::string::npos) {
+            // "Just works" pairing: nothing to type here; the car may ask you to confirm.
+            std::string out = run("bluetoothctl --agent=NoInputNoOutput --timeout 25 pair " + address);
+            if (out.find("Pairing successful") == std::string::npos &&
+                run("bluetoothctl info " + address).find("Paired: yes") == std::string::npos) {
+                error = "Pairing failed. Is it in pairing mode?";
+                return false;
+            }
+        }
+        run("bluetoothctl trust " + address);   // lets it reconnect by itself later
+        std::string out = run("bluetoothctl --timeout 15 connect " + address);
+        if (out.find("Connection successful") == std::string::npos &&
+            run("bluetoothctl info " + address).find("Connected: yes") == std::string::npos) {
+            error = "Paired, but it didn't connect";
+            return false;
+        }
+        return true;
+    }
+    void bt_disconnect(const std::string& address) override {
+        if (is_address(address)) run("bluetoothctl --timeout 8 disconnect " + address);
+    }
+    void bt_forget(const std::string& address) override {
+        if (is_address(address)) run("bluetoothctl remove " + address);
+    }
+    void bt_set_visible(int seconds) override {
+#ifndef __EMSCRIPTEN__
+        kill_child(visible_pid_, SIGTERM);
+        visible_pid_ = -1;
+        if (seconds <= 0) return;
+        run("rfkill unblock bluetooth");
+        run("bluetoothctl power on");
+        // bluetoothctl stays open as the pairing agent for the whole time,
+        // then trusts whatever paired so it can reconnect by itself.
+        std::string s = std::to_string(seconds);
+        visible_pid_ = spawn({"sh", "-c",
+            "(echo 'discoverable on'; echo 'pairable on'; sleep " + s + "; echo 'discoverable off') "
+            "| bluetoothctl --agent=NoInputNoOutput >/dev/null 2>&1; "
+            "bluetoothctl devices Paired | while read -r _ a _; do bluetoothctl trust \"$a\"; done"});
+#endif
+    }
+
+    // Play/skip buttons: BlueZ presents a connected car or headset's buttons
+    // as an input device (through uinput), like a USB multimedia keyboard.
+    MediaKey media_key() override {
+#ifdef __EMSCRIPTEN__
+        return MediaKey::None;
+#else
+        time_t now = time(nullptr);
+        if (now - media_scan_ >= 3) {   // devices come and go with the connection
+            media_scan_ = now;
+            for (int fd : media_fds_) close(fd);
+            media_fds_.clear();
+            for (auto& n : list_dir("/dev/input")) {
+                if (n.rfind("event", 0) != 0) continue;
+                int fd = open(("/dev/input/" + n).c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+                if (fd < 0) continue;
+                unsigned long keys[KEY_MAX / (8 * sizeof(long)) + 1] = {0};
+                ioctl(fd, EVIOCGBIT(EV_KEY, sizeof keys), keys);
+                auto has = [&](int k) { return (keys[k / (8 * sizeof(long))] >> (k % (8 * sizeof(long)))) & 1; };
+                // Media buttons but no letters: not the built-in keyboard.
+                if ((has(KEY_NEXTSONG) || has(KEY_PLAYCD) || has(KEY_PLAYPAUSE)) && !has(KEY_A)) media_fds_.push_back(fd);
+                else close(fd);
+            }
+        }
+        for (int fd : media_fds_) {
+            input_event ev;
+            while (read(fd, &ev, sizeof ev) == ssize_t(sizeof ev)) {
+                if (ev.type != EV_KEY || ev.value != 1) continue;
+                switch (ev.code) {
+                    case KEY_PLAYPAUSE: return MediaKey::PlayPause;
+                    case KEY_PLAYCD: case KEY_PLAY: return MediaKey::Play;
+                    case KEY_PAUSECD: case KEY_PAUSE: return MediaKey::Pause;
+                    case KEY_STOPCD: case KEY_STOP: return MediaKey::Stop;
+                    case KEY_NEXTSONG: case KEY_FASTFORWARD: return MediaKey::Next;
+                    case KEY_PREVIOUSSONG: case KEY_REWIND: return MediaKey::Previous;
+                }
+            }
+        }
+        return MediaKey::None;
+#endif
+    }
+
+    // --- USB stick mode: zeroos-usb-stick.service does the work as root and
+    // reports through a state file.
+    UsbStickStatus usb_stick() override {
+        UsbStickStatus st;
+        std::string s = read_str("/run/zeroos/usb-stick.state");
+        if (s.rfind("building", 0) == 0) {
+            st.state = UsbStickStatus::Building;
+            st.percent = std::atoi(s.c_str() + 8);
+        } else if (s.rfind("error:", 0) == 0) {
+            st.state = UsbStickStatus::Error;
+            st.error = s.substr(s.find_first_not_of(' ', 6) == std::string::npos ? 6 : s.find_first_not_of(' ', 6));
+        } else if (s.rfind("ready", 0) == 0) {
+            st.state = UsbStickStatus::Ready;
+            // "configured" once the car (or a PC) has taken it up.
+            for (auto& n : list_dir("/sys/class/udc"))
+                if (read_str("/sys/class/udc/" + n + "/state") == "configured") st.state = UsbStickStatus::Attached;
+        }
+        return st;
+    }
+    void usb_stick_start() override { run("systemctl start --no-block zeroos-usb-stick.service"); }
+    void usb_stick_stop() override { run("systemctl stop --no-block zeroos-usb-stick.service"); }
+
+    // --- Camera: M5Stack's camera_app draws on the LCD itself. It reads the
+    // keyboard without grabbing it, so ZeroShell still sees key presses and
+    // keeps the screen awake (it ignores what they mean while handed off).
+    CameraStatus camera() override {
+        CameraStatus st;
+        st.installed = access(kCameraApp, X_OK) == 0;
+        // A sensor that answered at boot is bound to its driver.
+        for (const char* drv : {"imx219", "imx477", "imx708", "imx296", "ov5647", "ov9281"}) {
+            for (auto& n : list_dir(std::string("/sys/bus/i2c/drivers/") + drv))
+                if (n.find('-') != std::string::npos && std::isdigit((unsigned char)n[0])) st.present = true;
+        }
+        return st;
+    }
+    bool camera_open() override {
+#ifdef __EMSCRIPTEN__
+        return false;
+#else
+        if (camera_active()) return true;
+        scan_stop();   // the QR reader must let go of the sensor first
+        if (access(kCameraApp, X_OK) != 0) return false;
+        const char* fb = std::getenv("ZS_FRAMEBUFFER");
+        cam_pid_ = spawn({"env", "CAMERA_APP_KEYBOARD_GRAB=0",
+                          std::string("CAMERA_APP_FB_DEVICE=") + (fb && fb[0] ? fb : "/dev/fb0"), kCameraApp});
+        return cam_pid_ > 0;
+#endif
+    }
+    bool camera_active() override {
+        if (cam_pid_ <= 0) return false;
+        if (exited(cam_pid_)) cam_pid_ = -1;
+        return cam_pid_ > 0;
+    }
+    void camera_close() override {
+        if (cam_pid_ <= 0) return;
+        kill_child(cam_pid_, SIGTERM);   // it saves and stops the sensor on SIGTERM
+        cam_pid_ = -1;
+    }
+
     static std::string json_str(const std::string& js, const std::string& key) {
         // Enough for tailscale's flat top-level string fields: "Key": "value"
         auto k = js.find("\"" + key + "\"");
@@ -1340,13 +1525,13 @@ private:
         return n;
     }
 
-    pid_t cam_pid_ = -1;
-    int cam_fd_ = -1;
-    CamState cam_state_ = CamState::Off;
-    std::vector<uint8_t> cam_front_, cam_back_;
-    size_t cam_fill_ = 0;
-    uint32_t cam_seq_ = 0;
-    time_t cam_want_ = 0;
+    pid_t scan_pid_ = -1;
+    int scan_fd_ = -1;
+    CamState scan_state_ = CamState::Off;
+    std::vector<uint8_t> scan_front_, scan_back_;
+    size_t scan_fill_ = 0;
+    uint32_t scan_seq_ = 0;
+    time_t scan_want_ = 0;
     pid_t tether_pid_ = -1;
     int tether_fd_ = -1;
     bool tether_status_job_ = false, tether_found_seen_ = false;

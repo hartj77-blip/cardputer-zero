@@ -50,7 +50,41 @@ const QueueItem* player_current() {
     return pb.path == g_queue[g_at].path ? &g_queue[g_at] : nullptr;
 }
 
+namespace {
+void on_media_key(MediaKey k) {
+    // Play pressed in the car with nothing queued: queue everything in ~/Music.
+    if (g_queue.empty() && k != MediaKey::Pause && k != MediaKey::Stop)
+        for (auto& t : hal().music_library()) g_queue.push_back({t.path, t.title, t.artist, t.duration_s, ""});
+    PlaybackState pb = hal().playback();
+    bool loaded = !pb.path.empty();
+    switch (k) {
+        case MediaKey::PlayPause:
+            if (loaded) hal().set_paused(!pb.paused);
+            else player_step(+1);          // nothing loaded: start the queue
+            break;
+        case MediaKey::Play:
+            if (loaded) hal().set_paused(false);
+            else player_step(+1);
+            break;
+        case MediaKey::Pause:
+            if (loaded) hal().set_paused(true);
+            break;
+        case MediaKey::Stop:
+            if (loaded) hal().set_paused(true);   // keep the queue: Play picks it up again
+            break;
+        case MediaKey::Next: player_step(+1); break;
+        case MediaKey::Previous: player_step(-1); break;
+        case MediaKey::None: break;
+    }
+}
+}  // namespace
+
 void player_tick() {
+    for (int i = 0; i < 4; ++i) {
+        MediaKey k = hal().media_key();
+        if (k == MediaKey::None) break;
+        on_media_key(k);
+    }
     if (g_at < 0) return;
     PlaybackState pb = hal().playback();
     if (!pb.path.empty()) return;          // still playing or paused
