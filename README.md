@@ -16,15 +16,15 @@ radios, audio, camera, real-time clock, key LEDs and the expansion ports.
 
 | Part | Status |
 | --- | --- |
-| `shell/` ZeroShell: status bar, launcher, 10 apps, toasts, keyboard navigation | Working in the simulator |
+| `shell/` ZeroShell: status bar, launcher, 19 apps, toasts, keyboard navigation | Working in the simulator |
 | `shell/src/hal/` hardware layer: simulated (PC) and Linux (device) | Linux side written, not yet tested on hardware |
 | `image/` image builder on M5's open pi-gen, pinned kernel and drivers | Built in CI on every image change |
 | `.github/workflows/` CI: simulator, screenshots, arm64 build, browser build, full SD image | Ready |
 
 Apps: **Terminal** (a real console on the built-in screen, with tmux), **Remote** (Tailscale sign-in by QR
 code, your devices, one-key SSH, remote desktop on a monitor, Taildrop), **Sync** (Notes, Documents and
-Recordings kept the same on your PC and phone with Syncthing), **GPS** and **Mesh** (Meshtastic
-text messaging over LoRa with the Cap LoRa-1262), **Car** (USB stick mode for a car stereo; Bluetooth audio with the car's play and skip buttons), **Camera** (M5's camera app: viewfinder, photos, gallery; full model only), **Files**, **Notes**, **Media** (music player, music from a Jellyfin server, voice notes), **Wi-Fi**, **IR Remote** (send + learn), **Compass** (with spirit level),
+Recordings kept the same on your PC and phone with Syncthing), **GPS** (position, saved spots, track recording to GPX) and **Mesh** (Meshtastic
+text messaging over LoRa with the Cap LoRa-1262), **Car** (USB stick mode for a car stereo; Bluetooth audio with the car's play and skip buttons), **Camera** (M5's camera app: viewfinder, photos, gallery; plus a QR code reader that joins Wi-Fi networks; full model only), **Tether** (online through your phone over Wi-Fi, USB or Bluetooth), **Files**, **Notes**, **Media** (music player, music from a Jellyfin server, voice notes), **Wi-Fi**, **IR Remote** (send + learn), **Compass** (with spirit level),
 **Battery** (time left, power draw, power profile), **Clock** (with stopwatch), **Dock** (desktop with web
 browser, video, terminal and files on an HDMI monitor), **System** monitor (CPU and
 where the memory goes), **Settings** (Wi-Fi, Bluetooth, brightness, volume, mute, power profile, screen dimming
@@ -44,7 +44,7 @@ cmake --build build/sim -j
 
 Keys: arrows move, **Enter** opens, **Esc** or **`** goes back, letters jump to an app on the home screen.
 On the home screen, **Left** from the first column moves into the dock, and **1** to **5** open the dock's apps.
-Inside apps: **R** rescans Wi-Fi, **L** learns an IR code, **Space** pauses music or runs the stopwatch, **N** skips a track, **R** records a voice note. Notes save when you leave.
+Inside apps: **R** rescans Wi-Fi (and records a GPS track), **L** learns an IR code, **Space** pauses music or runs the stopwatch, **N** skips a track, **R** records a voice note. Notes save when you leave.
 
 Or build the browser version (same code, WebAssembly, one HTML file with on-screen keys):
 
@@ -79,15 +79,16 @@ first, copy `build/device/zeroshell` over, stop the stock launcher
 - [docs/HARDWARE.md](docs/HARDWARE.md): every chip, how Linux exposes it, known issues and our fixes
 - [docs/ROADMAP.md](docs/ROADMAP.md): phases and what's next
 - [docs/REMOTE.md](docs/REMOTE.md): Remote mode, Tailscale, Terminal and Taildrop
-- [docs/CAMERA.md](docs/CAMERA.md): the Camera app
 - [docs/CAR.md](docs/CAR.md): music in the car over USB or Bluetooth
 - [docs/JELLYFIN.md](docs/JELLYFIN.md): music from a Jellyfin server in the Media app
 - [docs/SYNC.md](docs/SYNC.md): Sync for Notes, Documents and Recordings
-- [docs/EXPANSION.md](docs/EXPANSION.md): GPS and LoRa modules on the expansion ports
+- [docs/EXPANSION.md](docs/EXPANSION.md): GPS and LoRa modules on the expansion ports, track recording
+- [docs/CAMERA.md](docs/CAMERA.md): the Camera app and QR codes
+- [docs/TETHER.md](docs/TETHER.md): getting online through your phone
 - [docs/DOCK.md](docs/DOCK.md): Dock mode, the desktop on an HDMI monitor
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md): memory and battery tuning, measurements, and `zeroos-measure`
 
 ## License
 
-MIT. Builds on [LVGL](https://lvgl.io) (MIT), M5Stack's [pi-gen fork](https://github.com/CardputerZero/pi-gen)
+MIT. Builds on [LVGL](https://lvgl.io) (MIT), [quirc](https://github.com/dlbeer/quirc) (ISC), M5Stack's [pi-gen fork](https://github.com/CardputerZero/pi-gen)
 (BSD-3) and [board drivers](https://github.com/m5stack/m5stack-linux-dtoverlays).

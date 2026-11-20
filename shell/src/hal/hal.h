@@ -6,6 +6,7 @@
 // zerod system service; this interface stays the same.
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -64,6 +65,7 @@ struct NetStatus {
     bool ethernet = false;
     bool usb_gadget = false;
     std::string tailscale_ip;   // set while Tailscale is connected
+    std::string tether;         // "usb" or "bluetooth" while online through a phone
 };
 
 // Tailscale (see docs/REMOTE.md).
@@ -146,6 +148,39 @@ struct MeshMessage {
     bool mine = false;
     bool direct = false;      // sent to us only, not the whole channel
     long time = 0;            // unix time
+};
+
+// Pictures from the camera for the QR reader: 640x480
+// planar YUV (I420): w*h luma bytes, then two quarter-size colour planes.
+enum class CamState { Off, Starting, Running, NoCamera };
+
+struct CameraFrame {
+    int w = 0, h = 0;
+    const uint8_t* y = nullptr;   // valid until the next camera call
+    const uint8_t* u = nullptr;
+    const uint8_t* v = nullptr;
+    uint32_t seq = 0;             // goes up with every new frame
+};
+
+// Tethering: the internet through a phone, over USB or Bluetooth
+// (docs/TETHER.md). A phone's Wi-Fi hotspot is just a Wi-Fi network.
+struct TetherPhone {
+    std::string mac, name;
+    bool link = false;      // Bluetooth is connected
+    bool online = false;    // and we have a network through it
+};
+
+struct TetherStatus {
+    bool bt_on = false;
+    // A phone on the USB port sharing its connection.
+    bool usb = false;
+    std::string usb_name, usb_ip;
+    std::vector<TetherPhone> phones;   // paired over Bluetooth
+    std::vector<TetherPhone> found;    // from the last search, not yet paired
+    // What is going on now: "", "searching", "pairing", "connecting".
+    std::string busy, busy_mac;
+    std::string passkey;               // while pairing: the phone shows the same number
+    std::string error;                 // why the last action failed
 };
 
 struct IrCode {
@@ -298,6 +333,24 @@ public:
     // watching while it keeps being called; gps_stop() lets it go now.
     virtual GpsFix gps() = 0;
     virtual void gps_stop() = 0;
+
+    // QR scanning: ZeroShell's own look through the camera (the camera app
+    // above must be closed; one program can hold the sensor). scan_start()
+    // opens it (about a second); scan_frame() gives the newest picture and
+    // keeps the camera on while it keeps being called.
+    virtual void scan_start() = 0;
+    virtual void scan_stop() = 0;
+    virtual CamState scan_state() = 0;
+    virtual bool scan_frame(CameraFrame& out) = 0;
+
+    // Tethering. tether() is cheap and refreshes in the background while it
+    // keeps being called. The actions return at once; watch busy and error.
+    virtual TetherStatus tether() = 0;
+    virtual void tether_search() = 0;                        // nearby phones, ~10 s
+    virtual void tether_pair(const std::string& mac) = 0;    // pair, then connect
+    virtual void tether_connect(const std::string& mac) = 0;
+    virtual void tether_disconnect(const std::string& mac) = 0;
+    virtual void tether_forget(const std::string& mac) = 0;
 
     // LoRa mesh (Meshtastic).
     virtual MeshStatus mesh() = 0;

@@ -9,6 +9,8 @@
 //   Bluetooth  bluetoothctl / rfkill
 //   audio      wpctl (PipeWire), falls back to amixer
 //   IR         ir-ctl / ir-keytable (rc-core, gpio-ir-tx / gpio-ir-recv)
+//   QR codes   rpicam-vid (preview frames on a pipe)
+//   tethering  /usr/bin/zeroos-tether (bluetoothctl + nmcli), run in the background
 //   media      sox: `play` for mp3/flac/ogg/wav, `rec` for voice notes, `soxi` for
 //              durations. One small process per stream; pause = SIGSTOP/SIGCONT.
 //
@@ -136,6 +138,40 @@ pid_t spawn(const std::vector<std::string>& argv) {
 #endif
 }
 
+// The same, with the child's output on a pipe that we read without blocking.
+pid_t spawn_pipe(const std::vector<std::string>& argv, int& fd) {
+    fd = -1;
+#ifdef __EMSCRIPTEN__
+    return -1;
+#else
+    int p[2];
+    if (pipe(p) < 0) return -1;
+    pid_t pid = fork();
+    if (pid == 0) {
+        setpgid(0, 0);
+        int devnull = open("/dev/null", O_RDWR);
+        if (devnull >= 0) { dup2(devnull, 0); dup2(devnull, 2); }
+        dup2(p[1], 1);
+        close(p[0]);
+        close(p[1]);
+        std::vector<char*> a;
+        for (auto& s : argv) a.push_back(const_cast<char*>(s.c_str()));
+        a.push_back(nullptr);
+        execvp(a[0], a.data());
+        _exit(127);
+    }
+    close(p[1]);
+    if (pid < 0) {
+        close(p[0]);
+        return -1;
+    }
+    fcntl(p[0], F_SETFL, O_NONBLOCK);
+    fcntl(p[0], F_SETFD, FD_CLOEXEC);
+    fd = p[0];
+    return pid;
+#endif
+}
+
 // True if the child has exited (and reaps it).
 bool exited(pid_t pid) {
 #ifdef __EMSCRIPTEN__
@@ -184,6 +220,8 @@ std::string find_power_supply() {
 class LinuxHal : public Hal {
 public:
     ~LinuxHal() override {
+        scan_stop();
+        tether_end();
         gps_stop();
         stop();
         record_stop();
@@ -212,6 +250,9 @@ public:
         // Nobody has asked for the position for 5 s: let gpsd go idle.
         if (gps_fd_ >= 0 && time(nullptr) - gps_want_ > 5) gps_stop();
         mesh_pump();
+        // Nobody has looked through the camera for 3 s: turn it off.
+        if (scan_pid_ > 0 && time(nullptr) - scan_want_ > 3) scan_stop();
+        tether_pump();
         // Battery and IMU are cheap sysfs reads; cache them per poll.
         bat_cache_ = read_battery();
         imu_cache_ = read_imu();
@@ -834,6 +875,176 @@ private:
         return end == p ? def : v;
     }
 
+    // --- QR scanning. The preview is rpicam-vid writing raw 640x480 YUV frames to
+    // a pipe, ten a second; we keep the newest whole one. (640 is a multiple
+    // of 64, so the frames have no padding between rows.) To confirm on
+    // hardware: which way up the picture is.
+    static constexpr int kScanW = 640, kScanH = 480;
+    static constexpr size_t kScanBytes = size_t(kScanW) * kScanH * 3 / 2;
+    void scan_start() override {
+        if (scan_pid_ > 0) return;
+        scan_pid_ = spawn_pipe({"rpicam-vid", "--nopreview", "--timeout", "0", "--codec", "yuv420", "--width",
+                               std::to_string(kScanW), "--height", std::to_string(kScanH), "--framerate", "10",
+                               "--output", "-"},
+                              scan_fd_);
+        scan_state_ = scan_pid_ > 0 ? CamState::Starting : CamState::NoCamera;
+        if (scan_pid_ <= 0) return;
+#ifdef F_SETPIPE_SZ
+        if (fcntl(scan_fd_, F_SETPIPE_SZ, 1 << 20) < 0) {}   // room for two frames
+#endif
+        scan_back_.resize(kScanBytes);
+        scan_front_.resize(kScanBytes);
+        scan_fill_ = 0;
+        scan_seq_ = 0;
+        scan_want_ = time(nullptr);
+    }
+    void scan_stop() override {
+        kill_child(scan_pid_, SIGTERM);
+        scan_pid_ = -1;
+        if (scan_fd_ >= 0) close(scan_fd_);
+        scan_fd_ = -1;
+        scan_state_ = CamState::Off;
+    }
+    CamState scan_state() override { return scan_state_; }
+    bool scan_frame(CameraFrame& out) override {
+        scan_want_ = time(nullptr);
+        if (scan_pid_ <= 0 || scan_fd_ < 0) return false;
+        for (;;) {
+            ssize_t n = read(scan_fd_, scan_back_.data() + scan_fill_, kScanBytes - scan_fill_);
+            if (n > 0) {
+                scan_fill_ += size_t(n);
+                if (scan_fill_ == kScanBytes) {
+                    scan_front_.swap(scan_back_);
+                    scan_fill_ = 0;
+                    ++scan_seq_;
+                    scan_state_ = CamState::Running;
+                }
+                continue;
+            }
+            if (n == 0 || (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)) {
+                // rpicam-vid gave up: no camera (the Lite model), or it's in use.
+                scan_stop();
+                scan_state_ = CamState::NoCamera;
+                return false;
+            }
+            break;
+        }
+        if (!scan_seq_) return false;
+        out.w = kScanW;
+        out.h = kScanH;
+        out.y = scan_front_.data();
+        out.u = out.y + kScanW * kScanH;
+        out.v = out.u + kScanW * kScanH / 4;
+        out.seq = scan_seq_;
+        return true;
+    }
+    // --- Tethering. zeroos-tether prints tab-separated lines and always ends
+    // with the current state ("bt", "usb", "phone" lines, then "end"). It can
+    // take many seconds (a search, pairing), so it runs in the background
+    // and we read what it says from poll().
+    TetherStatus tether() override {
+        tether_want_ = time(nullptr);
+        tether_pump();
+        return tether_;
+    }
+    void tether_search() override { tether_run("searching", {"search"}, ""); }
+    void tether_pair(const std::string& mac) override { tether_run("pairing", {"pair", mac}, mac); }
+    void tether_connect(const std::string& mac) override { tether_run("connecting", {"connect", mac}, mac); }
+    void tether_disconnect(const std::string& mac) override { tether_run("", {"disconnect", mac}, mac); }
+    void tether_forget(const std::string& mac) override { tether_run("", {"forget", mac}, mac); }
+
+    void tether_run(const std::string& busy, std::vector<std::string> args, const std::string& mac) {
+        tether_end();
+        args.insert(args.begin(), "zeroos-tether");
+        tether_pid_ = spawn_pipe(args, tether_fd_);
+        tether_status_job_ = args[1] == "status";
+        if (tether_status_job_) return;
+        tether_.busy = busy;
+        tether_.busy_mac = mac;
+        tether_.passkey.clear();
+        tether_.error.clear();
+        if (tether_pid_ <= 0) tether_.busy.clear();
+    }
+    void tether_end() {
+        if (tether_pid_ > 0) kill_child(tether_pid_, SIGTERM);
+        tether_pid_ = -1;
+        if (tether_fd_ >= 0) close(tether_fd_);
+        tether_fd_ = -1;
+        tether_buf_.clear();
+        tether_next_ = TetherStatus{};
+        tether_found_seen_ = false;
+    }
+    void tether_pump() {
+        time_t now = time(nullptr);
+        if (tether_pid_ <= 0) {
+            // Refresh every 3 s while someone is looking.
+            if (now - tether_want_ <= 5 && now - tether_at_ >= 3) tether_run("", {"status"}, "");
+            return;
+        }
+        char buf[1024];
+        bool eof = false;
+        for (;;) {
+            ssize_t n = read(tether_fd_, buf, sizeof buf);
+            if (n > 0) {
+                tether_buf_.append(buf, size_t(n));
+                continue;
+            }
+            eof = n == 0 || (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR);
+            break;
+        }
+        size_t nl;
+        while ((nl = tether_buf_.find('\n')) != std::string::npos) {
+            std::vector<std::string> f;
+            std::istringstream ls(tether_buf_.substr(0, nl));
+            tether_buf_.erase(0, nl + 1);
+            for (std::string x; std::getline(ls, x, '\t');) f.push_back(x);
+            if (!f.empty()) tether_line(f);
+        }
+        if (eof) {
+            bool was_status = tether_status_job_;
+            tether_end();
+            tether_at_ = now;
+            if (!was_status) {
+                tether_.busy.clear();
+                tether_.busy_mac.clear();
+                tether_.passkey.clear();
+                net_ticks_ = 19;   // the status bar's network icons: look again now
+            }
+        }
+    }
+    void tether_line(const std::vector<std::string>& f) {
+        auto at = [&](size_t i) { return i < f.size() ? f[i] : std::string(); };
+        TetherStatus& n = tether_next_;
+        if (f[0] == "bt") n.bt_on = at(1) == "on";
+        else if (f[0] == "usb") {
+            n.usb = true;
+            n.usb_name = at(2);
+            n.usb_ip = at(3);
+        } else if (f[0] == "phone") n.phones.push_back({at(1), at(2), at(3) == "1", at(4) == "1"});
+        else if (f[0] == "found") {
+            n.found.push_back({at(1), at(2), false, false});
+            tether_found_seen_ = true;
+        } else if (f[0] == "searched") tether_found_seen_ = true;   // even if it found nothing
+        else if (f[0] == "passkey") tether_.passkey = at(1);
+        else if (f[0] == "stage") tether_.busy = at(1);
+        else if (f[0] == "error") tether_.error = at(1);
+        else if (f[0] == "end") {
+            // Keep what belongs to the action in progress; take the rest.
+            n.busy = tether_.busy;
+            n.busy_mac = tether_.busy_mac;
+            n.passkey = tether_.passkey;
+            n.error = tether_.error;
+            if (!tether_found_seen_) n.found = tether_.found;
+            for (auto& p : n.phones)   // a phone we just paired is no longer "found"
+                n.found.erase(std::remove_if(n.found.begin(), n.found.end(),
+                                             [&](const TetherPhone& x) { return x.mac == p.mac; }),
+                              n.found.end());
+            tether_ = n;
+            tether_next_ = TetherStatus{};
+            tether_found_seen_ = false;
+        }
+    }
+
     // --- LoRa mesh: meshtasticd.service (config in /etc/meshtasticd/config.d).
     MeshStatus mesh() override {
         time_t now = time(nullptr);
@@ -1174,6 +1385,7 @@ private:
         return false;
 #else
         if (camera_active()) return true;
+        scan_stop();   // the QR reader must let go of the sensor first
         if (access(kCameraApp, X_OK) != 0) return false;
         const char* fb = std::getenv("ZS_FRAMEBUFFER");
         cam_pid_ = spawn({"env", "CAMERA_APP_KEYBOARD_GRAB=0",
@@ -1285,7 +1497,26 @@ private:
                 if (l.rfind("Device ", 0) == 0) ++n.bt_connected;
         }
         n.ethernet = read_str("/sys/class/net/eth0/operstate") == "up";
-        n.usb_gadget = read_str("/sys/class/net/usb0/operstate") == "up";
+        // Online through a phone: a Bluetooth network link (bnep0), or a USB
+        // network interface from a phone's driver (Android: rndis_host or
+        // cdc_ncm; iPhone: ipheth).
+        std::string usb_phone;
+        for (auto& i : list_dir("/sys/class/net/")) {
+            std::string base = "/sys/class/net/" + i;
+            if (i.rfind("bnep", 0) == 0) {
+                if (n.tether.empty()) n.tether = "bluetooth";
+                continue;
+            }
+            char link[256];
+            ssize_t len = readlink((base + "/device/driver").c_str(), link, sizeof link - 1);
+            if (len <= 0) continue;
+            std::string driver(link, size_t(len));
+            driver = driver.substr(driver.rfind('/') + 1);
+            if (driver != "rndis_host" && driver != "ipheth" && driver != "cdc_ncm") continue;
+            usb_phone = i;
+            if (read_str(base + "/carrier") == "1") n.tether = "usb";
+        }
+        n.usb_gadget = usb_phone != "usb0" && read_str("/sys/class/net/usb0/operstate") == "up";
         if (access("/sys/class/net/tailscale0", F_OK) == 0) {
             std::string a = run("ip -4 -o addr show dev tailscale0 2>/dev/null");   // "... inet 100.x.y.z/32 ..."
             auto i = a.find("inet ");
@@ -1294,6 +1525,19 @@ private:
         return n;
     }
 
+    pid_t scan_pid_ = -1;
+    int scan_fd_ = -1;
+    CamState scan_state_ = CamState::Off;
+    std::vector<uint8_t> scan_front_, scan_back_;
+    size_t scan_fill_ = 0;
+    uint32_t scan_seq_ = 0;
+    time_t scan_want_ = 0;
+    pid_t tether_pid_ = -1;
+    int tether_fd_ = -1;
+    bool tether_status_job_ = false, tether_found_seen_ = false;
+    std::string tether_buf_;
+    TetherStatus tether_, tether_next_;
+    time_t tether_want_ = 0, tether_at_ = 0;
     bool dock_cache_ = false;
     TsStatus ts_cache_;
     SyncStatus sync_cache_;

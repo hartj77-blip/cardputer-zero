@@ -51,6 +51,8 @@ install -D -m 0644 files/expansion/meshtasticd-cap-lora-1262.yaml \
                    "${ROOTFS_DIR}/etc/meshtasticd/config.d/zeroos-cap-lora-1262.yaml"
 install -D -m 0644 files/expansion/meshtasticd-zeroos.conf \
                    "${ROOTFS_DIR}/etc/systemd/system/meshtasticd.service.d/zeroos.conf"
+# Tethering through a phone, over USB or Bluetooth (docs/TETHER.md).
+install -m 0755 files/tether/zeroos-tether   "${ROOTFS_DIR}/usr/bin/zeroos-tether"
 # Console font for the Terminal app: Terminus 6x12 gives 53 x 14 on 320 x 170.
 sed -i -e 's/^FONTFACE=.*/FONTFACE="Terminus"/' -e 's/^FONTSIZE=.*/FONTSIZE="6x12"/' \
     "${ROOTFS_DIR}/etc/default/console-setup" 2>/dev/null || true

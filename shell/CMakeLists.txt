@@ -28,6 +28,19 @@ set(LV_CONF_BUILD_DISABLE_DEMOS ON CACHE BOOL "" FORCE)
 set(LV_CONF_BUILD_DISABLE_THORVG_INTERNAL ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(lvgl)
 
+# quirc reads QR codes for the Camera app (ISC licence). It has no CMake build
+# of its own, so fetch the source only and compile its four files here.
+FetchContent_Declare(quirc
+  GIT_REPOSITORY https://github.com/dlbeer/quirc.git
+  GIT_TAG v1.2
+  GIT_SHALLOW TRUE
+  SOURCE_SUBDIR none)
+FetchContent_MakeAvailable(quirc)
+add_library(quirc STATIC
+  ${quirc_SOURCE_DIR}/lib/decode.c ${quirc_SOURCE_DIR}/lib/identify.c
+  ${quirc_SOURCE_DIR}/lib/quirc.c ${quirc_SOURCE_DIR}/lib/version_db.c)
+target_include_directories(quirc PUBLIC ${quirc_SOURCE_DIR}/lib)
+
 set(ZS_SDL 0)
 set(ZS_DEVICE 0)
 if(ZS_BACKEND STREQUAL "sim")
@@ -52,7 +65,7 @@ target_compile_definitions(zeroshell PRIVATE
   ZS_VERSION="${PROJECT_VERSION}"
   ZS_BACKEND_NAME="${ZS_BACKEND}")
 target_compile_options(zeroshell PRIVATE -Wall -Wextra -Wno-unused-parameter)
-target_link_libraries(zeroshell PRIVATE lvgl pthread m)
+target_link_libraries(zeroshell PRIVATE lvgl quirc pthread m)
 
 if(ZS_BACKEND STREQUAL "web")
   if(NOT EMSCRIPTEN)

@@ -4,8 +4,11 @@
 #include <cstdio>
 #include <ctime>
 
+#include <cstring>
+
 #include "hal/hal.h"
 #include "hal/play_clock.h"
+#include "src/libs/qrcode/qrcodegen.h"   // LVGL's bundled QR encoder, for the pretend camera
 #include "hal/proc_stats.h"
 
 namespace zs {
@@ -72,7 +75,13 @@ public:
         n.ip = wifi_on_ ? "192.168.1.42" : "";
         n.bt_enabled = bt_on_;
         n.bt_connected = bt_on_ && bt_paired_ ? 1 : 0;
+        for (auto& p : tether_phones_) n.bt_connected += p.link;
         if (ts_on_ && ts_signed_in_) n.tailscale_ip = "100.101.42.7";
+        for (auto& p : tether().phones)
+            if (p.online) {
+                n.tether = "bluetooth";
+                if (n.ip.empty()) n.ip = "172.20.10.4";
+            }
         return n;
     }
 
@@ -126,7 +135,14 @@ public:
         return true;
     }
     void set_wifi_enabled(bool on) override { wifi_on_ = on; }
-    void set_bt_enabled(bool on) override { bt_on_ = on; bt_paired_ = false; }
+    void set_bt_enabled(bool on) override {
+        bt_on_ = on;
+        bt_paired_ = false;
+        if (!on) {
+            for (auto& p : tether_phones_) p.link = p.online = false;
+            tether_job_.clear();
+        }
+    }
 
     int brightness() override { return brightness_; }
     void set_brightness(int p) override { brightness_ = p; }
@@ -234,11 +250,15 @@ public:
         long t = gps_clock_.ms();
         f.sats_seen = int(std::min<long>(14, 3 + t / 700));
         f.mode = t < 6000 ? 1 : 3;
-        f.time = "2026-11-16T14:20:31.000Z";
+        long sec = 14 * 3600 + 20 * 60 + 31 + t / 1000;
+        char when[40];
+        std::snprintf(when, sizeof when, "2026-11-16T%02ld:%02ld:%02ld.000Z", sec / 3600 % 24, sec / 60 % 60, sec % 60);
+        f.time = when;
         if (f.mode >= 2) {
-            double w = t / 4000.0;
-            f.lat = 51.500729 + 0.00002 * std::sin(w);
-            f.lon = -0.124625 + 0.00003 * std::cos(w);
+            // Walking north-east at 1.3 m/s, with a little wander.
+            double m = (t - 6000) / 1000.0 * 1.3, w = t / 4000.0;
+            f.lat = 51.500729 + m * 0.438 / 111320.0 + 0.000004 * std::sin(w);
+            f.lon = -0.124625 + m * 0.899 / 69300.0 + 0.000006 * std::cos(w);
             f.alt_m = 18.4;
             f.speed_mps = 1.3;
             f.track_deg = 64;
@@ -297,6 +317,131 @@ public:
         mesh_on_ = true;
     }
     void mesh_stop() override { mesh_on_ = false; }
+
+    // Camera, simulated: a desk with a card that slides into view. The card
+    // carries a real QR code (a different one each time the camera opens),
+    // so the app's reader is exercised end to end.
+    void scan_start() override {
+        if (cam_on_) return;
+        cam_on_ = true;
+        cam_clock_.start();
+        cam_seq_ = 0;
+        cam_drawn_ = -1000;
+        static const char* const kScenes[] = {
+            "WIFI:S:Pixel 9;T:WPA;P:pocket-hotspot;;",
+            "https://docs.m5stack.com/en/CardputerZero",
+            "Locker 14, code 2580",
+        };
+        cam_text_ = kScenes[cam_scene_++ % 3];
+    }
+    void scan_stop() override { cam_on_ = false; }
+    CamState scan_state() override {
+        if (!cam_on_) return CamState::Off;
+        return cam_clock_.ms() < 600 ? CamState::Starting : CamState::Running;
+    }
+    bool scan_frame(CameraFrame& out) override {
+        if (scan_state() != CamState::Running) return false;
+        long t = cam_clock_.ms();
+        if (t - cam_drawn_ >= 100) {
+            cam_drawn_ = t;
+            draw_scene(t - 600);
+            ++cam_seq_;
+        }
+        out.w = kCamW;
+        out.h = kCamH;
+        out.y = cam_.data();
+        out.u = cam_.data() + kCamW * kCamH;
+        out.v = out.u + kCamW * kCamH / 4;
+        out.seq = cam_seq_;
+        return true;
+    }
+    void draw_scene(long t) {
+        cam_.resize(size_t(kCamW) * kCamH * 3 / 2);
+        uint8_t* y = cam_.data();
+        uint8_t* u = y + kCamW * kCamH;
+        uint8_t* v = u + kCamW * kCamH / 4;
+        // A wooden desk: warm brown, lighter toward the top left, with grain.
+        for (int r = 0; r < kCamH; ++r)
+            for (int col = 0; col < kCamW; ++col)
+                y[r * kCamW + col] = uint8_t(118 - r / 12 - col / 20 + ((r * 7 + col / 9) % 13 < 2 ? -9 : 0) +
+                                             int((unsigned(r * 131 + col * 71 + cam_seq_ * 17) * 2654435761u) >> 30));
+        std::memset(u, 112, size_t(kCamW) * kCamH / 4);
+        std::memset(v, 146, size_t(kCamW) * kCamH / 4);
+        // The card slides in from the right during the first second, then
+        // sways a little, as a hand-held shot does.
+        static uint8_t qr[qrcodegen_BUFFER_LEN_FOR_VERSION(8)], tmp[qrcodegen_BUFFER_LEN_FOR_VERSION(8)];
+        if (!qrcodegen_encodeText(cam_text_.c_str(), tmp, qr, qrcodegen_Ecc_MEDIUM, 1, 8, qrcodegen_Mask_AUTO, true)) return;
+        int n = qrcodegen_getSize(qr), cell = 280 / n, card = n * cell + 48;
+        int slide = t < 1000 ? int((1000 - t) * 0.5) : 0;
+        int cx = (kCamW - card) / 2 + slide + int(5 * std::sin(t / 700.0));
+        int cy = (kCamH - card) / 2 + int(4 * std::cos(t / 900.0));
+        for (int r = 0; r < card; ++r) {
+            for (int col = 0; col < card; ++col) {
+                int px = cx + col, py = cy + r;
+                if (px < 0 || px >= kCamW || py < 0 || py >= kCamH) continue;
+                int mx = (col - 24) / cell, my = (r - 24) / cell;
+                bool dark = col >= 24 && r >= 24 && mx < n && my < n && qrcodegen_getModule(qr, mx, my);
+                y[py * kCamW + px] = dark ? 28 : 226;
+                u[(py / 2) * (kCamW / 2) + px / 2] = 128;
+                v[(py / 2) * (kCamW / 2) + px / 2] = 128;
+            }
+        }
+    }
+
+    // Tethering, simulated: a search finds two phones after 3 s; pairing shows
+    // a number for 4 s, then the phone is online 2 s later.
+    TetherStatus tether() override {
+        long t = tether_clock_.ms();
+        if (tether_job_ == "searching" && t > 3000) {
+            tether_job_.clear();
+            tether_found_.clear();
+            for (auto& f : std::vector<TetherPhone>{{"3C:28:6D:11:42:A0", "Pixel 9"}, {"F0:98:9D:5E:07:1B", "John's iPhone"}}) {
+                bool paired = false;
+                for (auto& p : tether_phones_) paired = paired || p.mac == f.mac;
+                if (!paired) tether_found_.push_back(f);
+            }
+        } else if (tether_job_ == "pairing" && t > 5000) {
+            for (size_t i = 0; i < tether_found_.size(); ++i)
+                if (tether_found_[i].mac == tether_mac_) {
+                    tether_phones_.push_back(tether_found_[i]);
+                    tether_found_.erase(tether_found_.begin() + long(i));
+                    break;
+                }
+            tether_job_ = "connecting";
+            tether_clock_.start();
+        } else if (tether_job_ == "connecting" && t > 2000) {
+            tether_job_.clear();
+            for (auto& p : tether_phones_) p.link = p.online = p.mac == tether_mac_;
+        }
+        TetherStatus s;
+        s.bt_on = bt_on_;
+        s.phones = tether_phones_;
+        s.found = tether_found_;
+        s.busy = tether_job_;
+        s.busy_mac = tether_job_.empty() ? "" : tether_mac_;
+        if (tether_job_ == "pairing" && tether_clock_.ms() > 1000) s.passkey = "483920";
+        return s;
+    }
+    void tether_job(const char* job, const std::string& mac) {
+        bt_on_ = true;
+        tether_job_ = job;
+        tether_mac_ = mac;
+        tether_clock_.start();
+    }
+    void tether_search() override { tether_job("searching", ""); }
+    void tether_pair(const std::string& mac) override { tether_job("pairing", mac); }
+    void tether_connect(const std::string& mac) override { tether_job("connecting", mac); }
+    void tether_disconnect(const std::string& mac) override {
+        for (auto& p : tether_phones_)
+            if (p.mac == mac) p.link = p.online = false;
+    }
+    void tether_forget(const std::string& mac) override {
+        for (size_t i = 0; i < tether_phones_.size(); ++i)
+            if (tether_phones_[i].mac == mac) {
+                tether_phones_.erase(tether_phones_.begin() + long(i));
+                break;
+            }
+    }
 
     bool terminal_open(const std::string&) override { return false; }   // no real console here
     bool terminal_active() override { return false; }
@@ -539,6 +684,17 @@ private:
     long mesh_reply_at_ = 0;
     int mesh_seq_ = 0;
     CpuMode cpu_ = CpuMode::Balanced;
+    static constexpr int kCamW = 640, kCamH = 480;
+    bool cam_on_ = false;
+    PlayClock cam_clock_;
+    long cam_drawn_ = 0;
+    uint32_t cam_seq_ = 0;
+    int cam_scene_ = 0;
+    std::string cam_text_;
+    std::vector<uint8_t> cam_;
+    std::vector<TetherPhone> tether_phones_, tether_found_;
+    std::string tether_job_, tether_mac_;
+    PlayClock tether_clock_;
 };
 
 }  // namespace

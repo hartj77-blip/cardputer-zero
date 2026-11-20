@@ -7,6 +7,7 @@
 // See docs/EXPANSION.md.
 #include "apps/common.h"
 #include "ui/power.h"
+#include "ui/tracker.h"
 
 namespace zs {
 namespace {
@@ -118,7 +119,7 @@ private:
             } else {
                 list_button(list, LV_SYMBOL_POWER, "Turn off mesh", [](lv_event_t* e) {
                     hal().mesh_stop();
-                    hal().set_ext_power(false);
+                    if (!track_state().recording) hal().set_ext_power(false);   // a track still needs the GPS
                     auto* self = static_cast<MeshApp*>(lv_event_get_user_data(e));
                     self->starting_ = false;
                     self->dirty_ = true;
