@@ -45,6 +45,7 @@
 #include <sstream>
 
 #include "hal/hal.h"
+#include "hal/lcd_fb.h"
 #include "hal/meshtastic.h"
 #include "hal/play_clock.h"
 #include "hal/proc_stats.h"
@@ -347,10 +348,7 @@ public:
     void set_screen_on(bool on) override {
         // bl_power: 0 = on, 4 = off. fb blank 4 = powerdown (panel sleep).
         if (!backlight_.empty()) write_str(backlight_ + "bl_power", on ? "0" : "4");
-        const char* fb = std::getenv("ZS_FRAMEBUFFER");
-        std::string name = fb ? fb : "/dev/fb0";
-        name = name.substr(name.rfind('/') + 1);
-        write_str("/sys/class/graphics/" + name + "/blank", on ? "0" : "4");
+        write_str("/sys/class/graphics/" + lcd_fb_sysfs_name() + "/blank", on ? "0" : "4");
     }
     void set_cpu_mode(CpuMode mode) override {
         // All four cores share one policy. zeroshell.service makes these
@@ -1392,9 +1390,8 @@ private:
         if (camera_active()) return true;
         scan_stop();   // the QR reader must let go of the sensor first
         if (access(kCameraApp, X_OK) != 0) return false;
-        const char* fb = std::getenv("ZS_FRAMEBUFFER");
         cam_pid_ = spawn({"env", "CAMERA_APP_KEYBOARD_GRAB=0",
-                          std::string("CAMERA_APP_FB_DEVICE=") + (fb && fb[0] ? fb : "/dev/fb0"), kCameraApp});
+                          "CAMERA_APP_FB_DEVICE=" + lcd_framebuffer(), kCameraApp});
         return cam_pid_ > 0;
 #endif
     }

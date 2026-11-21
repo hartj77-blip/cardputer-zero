@@ -13,7 +13,7 @@ ZeroOS is five layers. Each one only talks to the layer below it, so apps never 
 ## ZeroShell
 
 - **LVGL 9.2** (pinned), 16-bit color, the Ubuntu typeface (`shell/src/fonts/`, made by `shell/tools/fonts.sh`). One binary, three backends chosen at
-  build time: `sim` (SDL2 window), `device` (`/dev/fb0` + evdev keyboard), `headless` (renders to
+  build time: `sim` (SDL2 window), `device` (the LCD's framebuffer, found via `/dev/fb_lcd` + evdev keyboard), `headless` (renders to
   files, drives CI screenshots and smoke tests).
 - **Key routing.** The shell wraps the keypad driver, so every key press goes first to the current
   app's `on_key()`, then to shell keys (Esc = back, Up/Down = move focus), and only then to the
