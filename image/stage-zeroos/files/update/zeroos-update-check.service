@@ -1,0 +1,9 @@
+# Asks the update address whether a newer ZeroOS exists (docs/UPDATE.md).
+# Started by ZeroShell's Update app; nothing checks in the background.
+[Unit]
+Description=ZeroOS update: look for a new version
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/zeroos-update check
+TimeoutStartSec=2min

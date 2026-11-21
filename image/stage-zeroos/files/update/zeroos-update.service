@@ -1,0 +1,13 @@
+# Downloads and installs the newest ZeroOS package (docs/UPDATE.md).
+# ZeroShell's Update app starts it; it runs as root and outlives the restart
+# of ZeroShell that ends an update. Progress goes to /run/zeroos/update.status.
+[Unit]
+Description=ZeroOS update: download and install
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/zeroos-update install
+TimeoutStartSec=30min
+Nice=10
+IOSchedulingClass=idle

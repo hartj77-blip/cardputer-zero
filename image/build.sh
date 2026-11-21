@@ -58,7 +58,7 @@ rm -f stage4/EXPORT_IMAGE stage5/EXPORT_IMAGE
 rm -rf stage2/06-zeroos
 cp -r "$HERE/stage-zeroos" stage2/06-zeroos
 install -m 0755 "$ZEROSHELL_BIN" stage2/06-zeroos/files/zeroshell
-ZEROOS_VERSION=${ZEROOS_VERSION:-$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || echo dev)}
+ZEROOS_VERSION=${ZEROOS_VERSION:-$("$HERE/version.sh")}
 sed -i -e "s|@WIFI_COUNTRY@|${WIFI_COUNTRY:-US}|g" -e "s|@ZEROOS_VERSION@|${ZEROOS_VERSION}|g" stage2/06-zeroos/01-run.sh
 
 IMG_DATE=$(date +%Y-%m-%d)
