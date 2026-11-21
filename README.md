@@ -16,7 +16,7 @@ radios, audio, camera, real-time clock, key LEDs and the expansion ports.
 
 | Part | Status |
 | --- | --- |
-| `shell/` ZeroShell: status bar, launcher, 19 apps, toasts, keyboard navigation | Working in the simulator |
+| `shell/` ZeroShell: status bar, launcher, 20 apps, toasts, keyboard navigation | Working in the simulator |
 | `shell/src/hal/` hardware layer: simulated (PC) and Linux (device) | Linux side written, not yet tested on hardware |
 | `image/` image builder on M5's open pi-gen, pinned kernel and drivers | Built in CI on every image change |
 | `.github/workflows/` CI: simulator, screenshots, arm64 build, browser build, full SD image | Ready |
@@ -28,7 +28,7 @@ text messaging over LoRa with the Cap LoRa-1262), **Car** (USB stick mode for a 
 **Battery** (time left, power draw, power profile), **Clock** (with stopwatch), **Dock** (desktop with web
 browser, video, terminal and files on an HDMI monitor), **System** monitor (CPU and
 where the memory goes), **Settings** (Wi-Fi, Bluetooth, brightness, volume, mute, power profile, screen dimming
-and screen-off, Bluetooth auto-off, restart, shut down).
+and screen-off, Bluetooth auto-off, restart, shut down), **Update** (a newer ZeroOS over Wi-Fi or Ethernet, no re-flash).
 
 The screen dims after 30 s idle and turns off after 1 minute on battery; the first key only wakes it.
 Placing it face down turns the screen off at once; picking it up turns it back on.
@@ -69,6 +69,9 @@ cmake --build build/device -j
 image/build.sh build/device/zeroshell        # needs Docker; 1-2 hours
 ```
 
+After the first flash, new versions go on over the network: open **Update** on the device, or push
+a build from a PC with `tools/push-update.sh cardputer.local` (see [docs/UPDATE.md](docs/UPDATE.md)).
+
 Or run the **Build image** workflow from the Actions tab. To try ZeroShell on the stock M5 image
 first, copy `build/device/zeroshell` over, stop the stock launcher
 (`systemctl --user stop APPLaunch` or the system service), and run it.
@@ -77,6 +80,7 @@ first, copy `build/device/zeroshell` over, stop the stock launcher
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the layers fit together
 - [docs/HARDWARE.md](docs/HARDWARE.md): every chip, how Linux exposes it, known issues and our fixes
+- [docs/UPDATE.md](docs/UPDATE.md): updates over Wi-Fi or Ethernet, pushing a build from a PC, publishing a release
 - [docs/ROADMAP.md](docs/ROADMAP.md): phases and what's next
 - [docs/REMOTE.md](docs/REMOTE.md): Remote mode, Tailscale, Terminal and Taildrop
 - [docs/CAR.md](docs/CAR.md): music in the car over USB or Bluetooth

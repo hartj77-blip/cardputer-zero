@@ -204,6 +204,30 @@ struct UsbStickStatus {
     std::string error;        // Error: a short reason
 };
 
+// Software update (docs/UPDATE.md): zeroos-update does the work as root.
+struct UpdateStatus {
+    enum State {
+        Idle,          // nobody has looked yet
+        Checking,
+        UpToDate,
+        Available,     // latest is newer than current
+        Offline,       // the update server can't be reached
+        Downloading,   // percent counts
+        Installing,
+        Restarting,    // ZeroShell is about to be restarted
+        Done,          // now on the new version
+        RolledBack,    // the new version would not start; the old one is back
+        Failed,        // message says why
+    } state = Idle;
+    std::string current;      // the version on this device
+    std::string latest;       // the newest version on offer, if known
+    int percent = 0;
+    std::string message;
+    bool busy() const {
+        return state == Checking || state == Downloading || state == Installing || state == Restarting;
+    }
+};
+
 // Play/skip buttons on a car stereo or headset (Bluetooth), or a USB keyboard.
 enum class MediaKey { None, PlayPause, Play, Pause, Stop, Next, Previous };
 
@@ -413,6 +437,11 @@ public:
     virtual UsbStickStatus usb_stick() = 0;
     virtual void usb_stick_start() = 0;
     virtual void usb_stick_stop() = 0;
+
+    // Software update. Both actions return at once; watch update().
+    virtual UpdateStatus update() = 0;
+    virtual void update_check() = 0;
+    virtual void update_install() = 0;
 
     // Voice notes from the MEMS mic, saved to ~/Recordings as 16 kHz mono WAV.
     virtual std::vector<Track> recordings() = 0;          // newest first

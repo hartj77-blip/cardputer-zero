@@ -83,6 +83,7 @@ public:
                   [](int v) { set_sync_mode(v == 1 ? "always" : v == 2 ? "manual" : "charging"); });
 
         button_row(col, LV_SYMBOL_WIFI "  Wi-Fi networks", [](lv_event_t*) { shell_open_app("wifi"); });
+        button_row(col, LV_SYMBOL_DOWNLOAD "  Software update", [](lv_event_t*) { shell_open_app("update"); });
         button_row(col, LV_SYMBOL_LIST "  About this device", [](lv_event_t*) { shell_open_app("sysmon"); });
         button_row(col, LV_SYMBOL_REFRESH "  Restart", [](lv_event_t*) {
             shell_toast("Restarting...");

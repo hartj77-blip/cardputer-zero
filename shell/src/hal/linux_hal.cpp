@@ -88,6 +88,14 @@ std::string run(const std::string& cmd) {
     return out;
 }
 
+// "ZeroOS 1.2.3 (built 2026-11-20)" -> "1.2.3"; "" if there is no release file.
+std::string os_release_version() {
+    std::istringstream line(read_str("/etc/zeroos-release"));
+    std::string name, version;
+    line >> name >> version;
+    return version;
+}
+
 std::string shell_quote(const std::string& s) {
     std::string r = "'";
     for (char c : s) {
@@ -274,7 +282,10 @@ public:
         utsname u{};
         if (uname(&u) == 0) s.kernel = u.release;
         s.model = accel_.empty() ? "CardputerZero Lite" : "CardputerZero";
-        s.os_version = "ZeroOS " ZS_VERSION;
+        // The image and every update write the release file; without one
+        // (ZeroShell copied onto another image) say the shell's own version.
+        std::string rel = os_release_version();
+        s.os_version = "ZeroOS " + (rel.empty() ? std::string(ZS_VERSION) : rel);
         s.cpu_temp_c = int(read_long("/sys/class/thermal/thermal_zone0/temp") / 1000);
 #ifndef __EMSCRIPTEN__  // the web demo always uses MockHal
         struct sysinfo si{};
@@ -1371,6 +1382,35 @@ private:
     }
     void usb_stick_start() override { run("systemctl start --no-block zeroos-usb-stick.service"); }
     void usb_stick_stop() override { run("systemctl stop --no-block zeroos-usb-stick.service"); }
+
+    // --- Software update: zeroos-update runs as root from two services and
+    // reports through a state file of key=value lines.
+    UpdateStatus update() override {
+        UpdateStatus st;
+        st.current = os_release_version();
+        std::ifstream f("/run/zeroos/update.status");
+        std::string line, state;
+        while (std::getline(f, line)) {
+            size_t eq = line.find('=');
+            if (eq == std::string::npos) continue;
+            std::string k = line.substr(0, eq), v = line.substr(eq + 1);
+            if (k == "state") state = v;
+            else if (k == "latest") st.latest = v;
+            else if (k == "percent") st.percent = std::atoi(v.c_str());
+            else if (k == "message") st.message = v;
+        }
+        static const std::map<std::string, UpdateStatus::State> states = {
+            {"checking", UpdateStatus::Checking},     {"up-to-date", UpdateStatus::UpToDate},
+            {"available", UpdateStatus::Available},   {"offline", UpdateStatus::Offline},
+            {"downloading", UpdateStatus::Downloading}, {"installing", UpdateStatus::Installing},
+            {"restarting", UpdateStatus::Restarting}, {"done", UpdateStatus::Done},
+            {"rolled-back", UpdateStatus::RolledBack}, {"failed", UpdateStatus::Failed}};
+        auto it = states.find(state);
+        if (it != states.end()) st.state = it->second;
+        return st;
+    }
+    void update_check() override { run("systemctl start --no-block zeroos-update-check.service"); }
+    void update_install() override { run("systemctl start --no-block zeroos-update.service"); }
 
     // --- Camera: M5Stack's camera_app draws on the LCD itself. It reads the
     // keyboard without grabbing it, so ZeroShell still sees key presses and

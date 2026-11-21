@@ -69,5 +69,8 @@ STEPS+=",down,down,down,enter,wait:4000,shot:52-tether-search.ppm"
 STEPS+=",enter,wait:2000,shot:53-tether-pairing.ppm"
 STEPS+=",wait:7000,down,down,down,shot:54-tether-online.ppm"
 STEPS+=",open:gps,wait:7000,key:r,wait:45000,key:x,wait:300,shot:55-gps-track.ppm,key:r"
+STEPS+=",open:update,wait:2500,shot:56-update-available.ppm"
+STEPS+=",enter,wait:4000,shot:57-update-downloading.ppm"
+STEPS+=",wait:8000,shot:58-update-done.ppm"
 (cd "$OUT" && HOME="$DEMO" TZ=UTC "$BIN" --script "$STEPS")
 python3 "$HERE/ppm2png.py" "$OUT"

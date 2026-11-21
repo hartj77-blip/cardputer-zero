@@ -45,6 +45,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # image/version.sh counts commits since the last tag
       - name: Install cross compiler
         run: sudo apt-get update && sudo apt-get install -y cmake g++-aarch64-linux-gnu
       - name: Build
@@ -57,3 +59,13 @@ jobs:
         with:
           name: zeroshell-arm64
           path: build/device/zeroshell
+      # The update package (docs/UPDATE.md): send it to a device with
+      # tools/push-update.sh to try this build without re-flashing.
+      - name: Update tests
+        run: image/tests/update-test.sh
+      - name: Package
+        run: image/package.sh build/device/zeroshell build/update
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zeroos-package
+          path: build/update/

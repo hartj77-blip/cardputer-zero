@@ -637,6 +637,45 @@ public:
     }
     void usb_stick_stop() override { stick_on_ = false; }
 
+    // A pretend update: a newer version is found, downloads and installs.
+    UpdateStatus update() override {
+        UpdateStatus st;
+        st.current = update_done_ ? "0.3.0" : ZS_VERSION;
+        long ms = update_clock_.ms();
+        switch (update_step_) {
+            case 0: break;
+            case 1:
+                st.state = ms < 1500 ? UpdateStatus::Checking
+                                     : update_done_ ? UpdateStatus::UpToDate : UpdateStatus::Available;
+                break;
+            case 2:
+                if (ms < 5000) {
+                    st.state = UpdateStatus::Downloading;
+                    st.percent = int(ms / 50);
+                } else if (ms < 7000) {
+                    st.state = UpdateStatus::Installing;
+                } else if (ms < 9000) {
+                    st.state = UpdateStatus::Restarting;
+                } else {
+                    st.state = UpdateStatus::Done;
+                    st.message = "Now on 0.3.0";
+                    update_done_ = true;
+                    st.current = "0.3.0";
+                }
+                break;
+        }
+        if (st.state != UpdateStatus::Idle && st.state != UpdateStatus::Checking) st.latest = "0.3.0";
+        return st;
+    }
+    void update_check() override {
+        update_step_ = 1;
+        update_clock_.start();
+    }
+    void update_install() override {
+        update_step_ = 2;
+        update_clock_.start();
+    }
+
     CameraStatus camera() override { return {true, true, true}; }
     bool camera_open() override { return false; }
     bool camera_active() override { return false; }
@@ -652,6 +691,9 @@ private:
         {"AC:12:2F:5B:E0:41", "Headphones", true, false},
     };
     bool stick_on_ = false;
+    int update_step_ = 0;
+    bool update_done_ = false;
+    PlayClock update_clock_;
     PlayClock stick_clock_;
     PlaybackState pb_;
     PlayClock clock_, rec_clock_;
