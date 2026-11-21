@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "hal/hal.h"
+#include "hal/lcd_fb.h"
 #include "hal/play_clock.h"
 #include "ui/shell.h"
 
@@ -95,8 +96,9 @@ lv_indev_t* platform_init(int, int, int) {
     tty_graphics(true);
     std::atexit([] { tty_graphics(false); });
     lv_display_t* d = lv_linux_fbdev_create();
-    const char* fb = std::getenv("ZS_FRAMEBUFFER");
-    lv_linux_fbdev_set_file(d, fb ? fb : "/dev/fb0");  // fb0 = LCD, fb1 = HDMI
+    std::string fb = lcd_framebuffer();  // fb_lcd / the panel's fbN, not HDMI's
+    std::printf("zeroshell: display %s\n", fb.c_str());
+    lv_linux_fbdev_set_file(d, fb.c_str());
     std::string kb = find_keyboard();
     std::printf("zeroshell: keyboard %s\n", kb.c_str());
     lv_indev_t* in = lv_evdev_create(LV_INDEV_TYPE_KEYPAD, kb.c_str());

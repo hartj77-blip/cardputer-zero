@@ -5,4 +5,6 @@ drm
 drm_kms_helper
 drm_mipi_dbi
 panel_mipi_dbi
+# M5's own build of it (panel-mipi-dbi-m.ko, "panel-mipi-dbi-m5stack")
+panel_mipi_dbi_m
 vc4

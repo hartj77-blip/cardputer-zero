@@ -73,7 +73,17 @@ install -D -m 0644 "$F/nm-wifi-powersave.conf" "$D/etc/NetworkManager/conf.d/90-
 install -d "$D/etc/systemd/system/console-setup.service.d"
 cat > "$D/etc/systemd/system/console-setup.service.d/zeroos-unblank.conf" <<'UNIT'
 [Service]
-ExecStartPost=/bin/sh -c 'echo 1 > /sys/class/graphics/fb0/blank; echo 0 > /sys/class/graphics/fb0/blank'
+ExecStartPost=-/bin/sh -c 'for b in /sys/class/graphics/fb*/blank; do echo 1 > $b; echo 0 > $b; done'
+UNIT
+# M5's boot logo (fb_load.service, from the LCD driver) waits with --keep-open
+# until M5's launcher starts, holding the LCD's DRM device the whole time. We
+# don't ship that launcher, so it never let go and ZeroShell's drawing never
+# reached the screen. Show the logo, then exit.
+install -d "$D/etc/systemd/system/fb_load.service.d"
+cat > "$D/etc/systemd/system/fb_load.service.d/zeroos.conf" <<'UNIT'
+[Service]
+ExecStart=
+ExecStart=/usr/sbin/fb_load
 UNIT
 
 # Overrides: settings files that belong to another Debian package, so ours
